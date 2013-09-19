@@ -265,6 +265,32 @@ if [ $? -ne 0 ]; then
 fi
 
 #----------------------------------------------------------------
+# Install NFS client
+
+if [ "$FLAVOUR" = 'rhel' ]; then
+
+  # nfs-utils
+  rpm -q nfs-utils > /dev/null
+  if [ $? -ne 0 ]; then
+    # Package not installed: install it
+    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
+    yum -y $QUIET_FLAG install "nfs-utils"
+    check_ok 
+  fi
+
+elif [ "$FLAVOUR" = 'ubuntu' ]; then
+
+  # nfs-common
+  if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-qq"; fi
+  apt-get -y --no-upgrade $QUIET_FLAG install "nfs-common"
+  check_ok
+
+else
+  echo "$PROG: internal error" >&2
+  exit 3
+fi
+
+#----------------------------------------------------------------
 # Ad hoc mounting and unmounting
 
 if [ -n "$DO_MOUNT" ]; then
@@ -325,16 +351,6 @@ fi
 # apt-get update
 
 if [ "$FLAVOUR" = 'rhel' ]; then
-
-  # Install NFS utils (includes NFS client)
-
-  rpm -q nfs-utils > /dev/null
-  if [ $? -ne 0 ]; then
-    # Package not installed: install it
-    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
-    yum -y $QUIET_FLAG install "nfs-utils"
-    check_ok
-  fi
 
   # Install autofs
 
