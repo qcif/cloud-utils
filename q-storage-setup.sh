@@ -326,6 +326,18 @@ fi
 
 if [ "$FLAVOUR" = 'rhel' ]; then
 
+  # Install NFS utils (includes NFS client)
+
+  rpm -q nfs-utils > /dev/null
+  if [ $? -ne 0 ]; then
+    # Package not installed: install it
+    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
+    yum -y $QUIET_FLAG install "nfs-utils"
+    check_ok
+  fi
+
+  # Install autofs
+
   rpm -q autofs > /dev/null
   if [ $? -ne 0 ]; then
     # Package not installed: install it
@@ -336,7 +348,7 @@ if [ "$FLAVOUR" = 'rhel' ]; then
 
 elif [ "$FLAVOUR" = 'ubuntu' ]; then
 
-# TODO: check if already installed?
+  # TODO: check if already installed?
 
   if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-qq"; fi
   apt-get -y --no-upgrade $QUIET_FLAG install "autofs"
