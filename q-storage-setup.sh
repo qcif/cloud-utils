@@ -10,7 +10,9 @@ DEFAULT_AUTO_MOUNT_DIR="/data"
 
 NFS_SERVER=10.255.100.50
 
-MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,bg,nosuid,nodev,nolock,timeo=15,retrans=5"
+MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,bg,nosuid,nodev,timeo=15,retrans=5"
+MOUNT_OPTIONS_RHEL=nolock
+MOUNT_OPTIONS_UBUNTU=
 
 #----------------------------------------------------------------
 # Process command line arguments
@@ -146,11 +148,11 @@ if [ -z "$FORCE" ]; then
   else
     DISTRO=unknown
   fi
-  if [ "$DISTRO" = 'CentOS release 6.4 (Final)' ]; then
+  if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
+       "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' ]; then
     FLAVOUR=rhel
-  elif [ "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' ]; then
-    FLAVOUR=rhel
-  elif [ "$DISTRO" = 'Ubuntu 13.04' ]; then
+  elif [ "$DISTRO" = 'Ubuntu 13.04' -o \
+         "$DISTRO" = 'Ubuntu 12.10' ]; then
     FLAVOUR=ubuntu
   else
     echo "$PROG: error: unsupported distribution: $DISTRO (use --force?)"
@@ -167,6 +169,17 @@ fi
 if [ `id -u` != '0' ]; then
   echo "$PROG: this script requires root privileges" >&2
   exit 1
+fi
+
+#----------------------------------------------------------------
+
+if [ $FLAVOUR = 'rhel' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_RHEL"
+elif [ $FLAVOUR = 'ubuntu' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_UBUNTU"
+else
+  echo "$PROG: internal error" >&2
+  exit 3
 fi
 
 #----------------------------------------------------------------
