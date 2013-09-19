@@ -1,4 +1,6 @@
 #!/bin/sh
+#
+# Setup NFS mounting of storage.
 #----------------------------------------------------------------
 
 PROG=`basename $0`
@@ -7,6 +9,9 @@ DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
 NFS_SERVER=10.255.100.50
+MOUNT_PATH="$NFS_SERVER:/collection/$ALLOC/$ALLOC"
+
+MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,bg,nosuid,nodev,nolock,timeo=15,retrans=5"
 
 #----------------------------------------------------------------
 # Process command line arguments
@@ -307,9 +312,7 @@ if [ -n "$DO_MOUNT" ]; then
       check_ok
     fi
     # Perform the mount operation
-    mount -t nfs \
-      -o 'rw,nfsvers=3,hard,intr,bg,nosuid,nodev,timeo=15,retrans=5' \
-      "$NFS_SERVER:/collection/$ALLOC/$ALLOC" "$DIR/$ALLOC"
+    mount -t nfs -o "$MOUNT_OPTIONS" "$MOUNT_PATH" "$DIR/$ALLOC"
     check_ok
   done 
   exit 0 # done for this mode
@@ -396,7 +399,7 @@ check_ok
 
 for ALLOC in "$@"
 do
-  echo "$DIR/$ALLOC -rw,nfsvers=3,hard,intr,bg,nosuid,nodev,timeo=15,retrans=5 $NFS_SERVER:/collection/$ALLOC/$ALLOC" >> "$DMAP"
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS $MOUNT_PATH" >> "$DMAP"
   check_ok
 done
 
