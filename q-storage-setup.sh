@@ -434,14 +434,14 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
   grep :48: /etc/group > /dev/null
   if [ $? -ne 0 ]; then
     # Group 48 does not exist: create it
-    adduser --group 48 --gecos "Apache" apache
+    addgroup --gid 48 --gecos "Apache" --quiet apache
     check_ok
   fi
 
   grep :48: /etc/passwd > /dev/null
   if [ $? -ne 0 ]; then
     # User 48 does not exist: create it
-    adduser --uid 48 --gid 48 --gecos "Apache" \
+    adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
             --no-create-home --home /var/www \
             --shell /sbin/nologin --disabled-login apache
     check_ok
@@ -450,7 +450,7 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
   grep :55931: /etc/passwd > /dev/null
   if [ $? -ne 0 ]; then
     # User 55931 does not exist: create it
-    adduser --uid 55931 --gid 48 --gecos "Admin" \
+    adduser --uid 55931 --gid 48 --gecos "Admin" --quiet \
             --no-create-home \
             --shell /sbin/nologin --disabled-login admin
     check_ok
