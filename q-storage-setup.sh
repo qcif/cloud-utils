@@ -9,7 +9,6 @@ DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
 NFS_SERVER=10.255.100.50
-MOUNT_PATH="$NFS_SERVER:/collection/$ALLOC/$ALLOC"
 
 MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,bg,nosuid,nodev,nolock,timeo=15,retrans=5"
 
@@ -312,7 +311,8 @@ if [ -n "$DO_MOUNT" ]; then
       check_ok
     fi
     # Perform the mount operation
-    mount -t nfs -o "$MOUNT_OPTIONS" "$MOUNT_PATH" "$DIR/$ALLOC"
+    mount -t nfs -o "$MOUNT_OPTIONS" \
+       "$NFS_SERVER:/collection/$ALLOC/$ALLOC" "$DIR/$ALLOC"
     check_ok
   done 
   exit 0 # done for this mode
@@ -399,7 +399,7 @@ check_ok
 
 for ALLOC in "$@"
 do
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS $MOUNT_PATH" >> "$DMAP"
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS $NFS_SERVER:/collection/$ALLOC/$ALLOC" >> "$DMAP"
   check_ok
 done
 
