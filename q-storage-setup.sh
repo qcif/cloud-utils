@@ -148,6 +148,8 @@ if [ -z "$FORCE" ]; then
   fi
   if [ "$DISTRO" = 'CentOS release 6.4 (Final)' ]; then
     FLAVOUR=rhel
+  elif [ "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' ]; then
+    FLAVOUR=rhel
   elif [ "$DISTRO" = 'Ubuntu 13.04' ]; then
     FLAVOUR=ubuntu
   else
@@ -426,8 +428,27 @@ check_ok
 
 if [ "$FLAVOUR" = 'rhel' ]; then
 
-  # TODO
-  echo ""
+  grep :48: /etc/group > /dev/null
+  if [ $? -ne 0 ]; then
+    groupadd --gid 48 WebDAV
+    check_ok
+  fi
+
+  grep :48: /etc/passwd > /dev/null
+  if [ $? -ne 0 ]; then
+    # User 48 does not exist: create it
+    adduser --uid 48 --gid 48 --comment "Apache" \
+            --no-create-home --home-dir /var/www --shell /sbin/nologin apache
+    check_ok
+  fi
+
+  grep :55931: /etc/passwd > /dev/null
+  if [ $? -ne 0 ]; then
+    # User 55931 does not exist: create it
+    adduser --uid 55931 --gid 48 --comment "Admin" \
+            --no-create-home --shell /sbin/nologin admin
+    check_ok
+  fi
 
 elif [ "$FLAVOUR" = 'ubuntu' ]; then
 
