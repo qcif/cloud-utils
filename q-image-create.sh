@@ -79,23 +79,23 @@ fi
 #----------------------------------------------------------------
 # Check dependent programs are installed
 
-KVM_IMG=`which kvm-img`
-if [ $? -ne 0 ]; then
-  echo "$PROG: kvm-img program not found" >&2
-  echo "$PROG: install with \"apt-get install qemu-kvm cloud-utils\"" >&2
-  exit 3
+MISSING_PACKAGES=
+
+if ! which kvm-img >/dev/null || ! which qemu-system-x86_64 >/dev/null; then
+  MISSING_PACKAGES="$MISSING_PACKAGES qemu-kvm cloud-utils"
 fi
 
-QEMU=`which qemu-system-x86_64`
-if [ $? -ne 0 ]; then
-  echo "$PROG: qemu-system-x86_64 program not found" >&2
-  echo "$PROG: install with \"apt-get install qemu-kvm cloud-utils\"" >&2
-  exit 3
+if ! which glance >/dev/null; then
+  MISSING_PACKAGES="$MISSING_PACKAGES glance"
 fi
 
 if ! which expect >/dev/null; then
-  echo "$PROG: expect program not found" >&2
-  echo "$PROG: install by running \"apt-get install expect\"" >&2
+  MISSING_PACKAGES="$MISSING_PACKAGES expect"
+fi
+
+if [ -n "$MISSING_PACKAGES" ]; then
+  echo "$PROG: dependencies missing. To install them, please run" >&2
+  echo "  apt-get install $MISSING_PACKAGES" >&2
   exit 3
 fi
 
