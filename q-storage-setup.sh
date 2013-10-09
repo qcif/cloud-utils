@@ -25,9 +25,11 @@ DEFAULT_AUTO_MOUNT_DIR="/data"
 
 NFS_SERVER=10.255.100.50
 
-MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,bg,nosuid,nodev,timeo=15,retrans=5"
+MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=15,retrans=5"
 MOUNT_OPTIONS_RHEL=nolock
 MOUNT_OPTIONS_UBUNTU=
+
+$MOUNT_AUTOFS_EXTRA=bg
 
 #----------------------------------------------------------------
 # Process command line arguments
@@ -531,7 +533,7 @@ check_ok
 
 for ALLOC in "$@"
 do
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS $NFS_SERVER:/collection/$ALLOC/$ALLOC" >> "$DMAP"
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_SERVER:/collection/$ALLOC/$ALLOC" >> "$DMAP"
   check_ok
 done
 
