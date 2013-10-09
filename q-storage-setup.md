@@ -91,6 +91,14 @@ Prints a short help message.
 Examples
 --------
 
+### Obtaining the script
+
+The easiest way to obtain the latest copy of the script is
+to download it directly from GitHub:
+
+   $ curl -O https://raw.github.com/qcif/cloud-utils/master/q-storage-setup.sh
+   $ chmod a+x q-storage-setup.sh
+
 ### Ad hoc testing
 
 Mount collection Q0039, examine its contents and unmount it.
