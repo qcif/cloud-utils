@@ -133,6 +133,9 @@ QCIF knowledge base article on _NFS mounting collection storage for Linux_.
 Bugs
 ----
 
+The unmount mode does not delete any of the user accounts or groups
+created by the mount mode.
+
 In mount mode, the `bg` option is specified. This causes the _mount_
 command to run in the background if an error occurs.
 
