@@ -151,6 +151,11 @@ do
       ERROR=1
       continue
     fi
+  elif [ "$NUM" -gt 999 ]; then
+    # This will cause UID/GID to violate the 54nnn pattern and
+    # the behaviour is not yet defined.
+    echo "$PROG: internal error: collections greater than 999 not supported" >&2
+    exit 3
   else
     echo $ALLOC | grep '^Q[0-9][0-9][0-9][0-9]$' > /dev/null
     if [ $? -ne 0 ]; then
@@ -398,13 +403,19 @@ if [ "$FLAVOUR" = 'rhel' ]; then
     check_ok
   fi
 
-  grep :55931: /etc/passwd > /dev/null
-  if [ $? -ne 0 ]; then
-    # User 55931 does not exist: create it
-    adduser --uid 55931 --gid 48 --comment "Admin" \
-            --no-create-home --shell /sbin/nologin admin
-    check_ok
-  fi
+  for ALLOC in "$@"
+  do
+    NUM=`echo $ALLOC | sed s/Q0*//`
+    ID_NUMBER=`expr 54000 + $NUM`
+
+    grep ":$ID_NUMBER:" /etc/passwd > /dev/null
+    if [ $? -ne 0 ]; then
+      # User does not exist: create it
+      adduser --uid "$ID_NUMBER" --comment "Collection $NUM" \
+              --no-create-home --shell /sbin/nologin "q$NUM"
+      check_ok
+    fi
+  done
 
 elif [ "$FLAVOUR" = 'ubuntu' ]; then
 
@@ -424,14 +435,20 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     check_ok
   fi
 
-  grep :55931: /etc/passwd > /dev/null
-  if [ $? -ne 0 ]; then
-    # User 55931 does not exist: create it
-    adduser --uid 55931 --gid 48 --gecos "Admin" --quiet \
-            --no-create-home \
-            --shell /sbin/nologin --disabled-login admin
-    check_ok
-  fi
+  for ALLOC in "$@"
+  do
+    NUM=`echo $ALLOC | sed s/Q0*//`
+    ID_NUMBER=`expr 54000 + $NUM`
+
+    grep ":$ID_NUMBER:" /etc/passwd > /dev/null
+    if [ $? -ne 0 ]; then
+      # User does not exist: create it
+      adduser --uid "$ID_NUMBER" --gecos "Collection $NUM" --quiet \
+              --no-create-home \
+              --shell /sbin/nologin --disabled-login "q$NUM"
+      check_ok
+    fi
+  done
 
 else
   echo "$PROG: internal error" >&2
