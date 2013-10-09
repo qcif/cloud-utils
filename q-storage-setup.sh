@@ -116,10 +116,32 @@ fi
 ERROR=
 for ALLOC in "$@"
 do
-  echo $ALLOC | grep '^Q[0-9][0-9][0-9][0-9]$' > /dev/null
+  echo $ALLOC | grep '^Q[0-9][0-9]*$' > /dev/null
   if [ $? -ne 0 ]; then
-    echo "Usage error: not a storageID name (expecting Qnnnn): $ALLOC" >&2
-    ERROR=1 
+    echo "Usage error: bad storageID name (expecting Qnnnn or Qnn): $ALLOC" >&2
+    ERROR=1
+    continue
+  fi
+  NUM=`echo $ALLOC | sed s/Q0*//`
+  echo $NUM | grep '^[0-9][0-9]*$' > /dev/null
+  if [ $? -ne 0 ]; then
+    echo "Usage error: bad storageID name: zero is not valid: $ALLOC" >&2
+    ERROR=1
+    continue
+  fi
+  if [ "$NUM" -le 5 ]; then
+    echo $ALLOC | grep '^Q[0-9][0-9]$' > /dev/null
+    if [ $? -ne 0 ]; then
+      echo "Usage error: storageID name should be Qnn: $ALLOC" >&2
+      ERROR=1
+      continue
+    fi
+  else
+    echo $ALLOC | grep '^Q[0-9][0-9][0-9][0-9]$' > /dev/null
+    if [ $? -ne 0 ]; then
+      echo "Usage error: storageID name should be Qnnnn: $ALLOC" >&2
+      ERROR=1
+    fi
   fi
 done
 if [ -n "$ERROR" ]; then
