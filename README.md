@@ -1,20 +1,35 @@
 QCIF Cloud utilities
 ====================
 
-Utilities for working with QCIF cloud VM instances.
+Utilities for working with QCIF virtual machine instances and
+collection storage.
 
-**These scripts are under construction!**
+**These scripts are in beta development.**
 
+		
 Scripts
 -------
+
+### q-storage-setup.sh
+
+Setup a NFS client to mount RDSI storage.
 
 ### q-gui-setup.sh
 
 Setup X-Windows plus a VNC server.
 
-### q-storage-setup.sh
+### q-image-create.sh
 
-Setup a NFS client to mount RDSI storage.
+Utility to help with the process of creating a virtual machine image
+for NeCTAR.
+
+Licence
+-------
+
+These scripts are distributed in the hope that they will be useful,
+but **without any warranty**; without even the implied warranty of
+**merchantability** or **fitness for a particular purpose**.  See the
+GNU General Public License for more details.
 
 Contact
 -------
