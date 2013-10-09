@@ -49,6 +49,11 @@ The `storageID` must be one or more collection names. These must be of
 the form "Qnnnn" where _n_ is a digit (except for Q01, Q02, Q03, Q04,
 Q05 and Q16, which only have two digits.
 
+The first time this script is used, it might take a few minutes to
+run. This is because it needs to download and install the dependent
+packages. Run it in verbose mode if you want to see an indication of
+progress while you are waiting.
+
 ### Configure autofs mode
 
 This mode configures _autofs_ to NFS mount the specified collection
