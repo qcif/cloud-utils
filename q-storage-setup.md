@@ -96,23 +96,24 @@ Examples
 The easiest way to obtain the latest copy of the script is
 to download it directly from GitHub:
 
-   $ curl -O https://raw.github.com/qcif/cloud-utils/master/q-storage-setup.sh
-   $ chmod a+x q-storage-setup.sh
+    $ curl -O https://raw.github.com/qcif/cloud-utils/master/q-storage-setup.sh
+    $ chmod a+x q-storage-setup.sh
 
 ### Ad hoc testing
 
-Mount collection Q0039, examine its contents and unmount it.
+Mount collection Q0039, examine its contents and unmount it. Since the
+script reqires root privileges, the _sudo_ command is used.
 
-    # ./q-storage-setup.sh --mount Q0039
-    # ls /mnt/Q0039
-    # ./q-storage-setup.sh --umount Q0039
+    $ sudo ./q-storage-setup.sh --mount Q0039
+    $ sudo ls /mnt/Q0039
+    $ sudo ./q-storage-setup.sh --umount Q0039
 
 ### Configure autofs
 
 Configure autofs and examine its contents.
 
-    # ./q-storage-setup.sh Q0039
-    # ls /data/Q0039
+    $ sudo ./q-storage-setup.sh Q0039
+    $ sudo ls /data/Q0039
 
 
 Environment
