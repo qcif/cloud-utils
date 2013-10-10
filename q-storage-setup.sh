@@ -29,7 +29,7 @@ MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=15,retrans=5"
 MOUNT_OPTIONS_RHEL=nolock
 MOUNT_OPTIONS_UBUNTU=
 
-$MOUNT_AUTOFS_EXTRA=bg
+MOUNT_AUTOFS_EXTRA=bg
 
 #----------------------------------------------------------------
 # Process command line arguments
@@ -268,12 +268,17 @@ EOF
 
     # Bring up the network interface
 
-    ifup eth1
+    if [ -n "$VERBOSE" ]; then
+      echo "$PROG: ifup eth1"
+    fi
+    ifup eth1 > /dev/null
     check_ok
 
     # Show DHCP assigned IP addresses
 
-    ip addr show dev eth1
+    if [ -n "$VERBOSE" ]; then
+      ip addr show dev eth1
+    fi
 
     I_CONFIGURED_ETH1=yes
   fi
@@ -362,6 +367,9 @@ if [ -n "$DO_UMOUNT" ]; then
   do
     if [ -d "$DIR/$ALLOC" ]; then
       # Attempt to unmount
+      if [ -n "$VERBOSE" ]; then
+        echo "umount \"$DIR/$ALLOC\""
+      fi
       umount "$DIR/$ALLOC"
       if [ $? -ne 0 ]; then
         ERROR=yes
@@ -474,6 +482,9 @@ if [ -n "$DO_MOUNT" ]; then
       check_ok
     fi
     # Perform the mount operation
+    if [ -n "$VERBOSE" ]; then
+      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_SERVER:/collection/$ALLOC/$ALLOC\" \"$DIR/$ALLOC\""
+    fi
     mount -t nfs -o "$MOUNT_OPTIONS" \
        "$NFS_SERVER:/collection/$ALLOC/$ALLOC" "$DIR/$ALLOC"
     check_ok
