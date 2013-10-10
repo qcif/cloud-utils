@@ -51,8 +51,8 @@ Q05 and Q16, which only have two digits.
 
 The first time this script is used, it might take a few minutes to
 run. This is because it needs to download and install the dependent
-packages. Run it in verbose mode if you want to see an indication of
-progress while you are waiting.
+packages. Use verbose mode to see an indication of progress as it is
+running.
 
 ### Configure autofs mode
 
@@ -108,6 +108,11 @@ script reqires root privileges, the _sudo_ command is used.
     $ sudo ls /mnt/Q0039
     $ sudo ./q-storage-setup.sh --umount Q0039
 
+Remember, the first execution of the script might take a few minutes
+to run. This is because it needs to download and install the dependent
+packages. Don't panic if it runs for a few minutes without printing
+anything out. Add the "--verbose" option to see its progress.
+
 ### Configure autofs
 
 Configure autofs and examine its contents.
@@ -139,6 +144,13 @@ Collection storage can only be NFS mounted from virtual machine
 instances running on the Queensland node. The current system is
 not running on the Queensland node.
 
+### dhclieht(...) is already running - exiting
+
+This error has been seen on Fedora 18.
+
+Just re-run the script a second time, with the same parameters, and it
+will work.
+
 See also
 --------
 
@@ -146,6 +158,12 @@ QCIF knowledge base article on _NFS mounting collection storage for Linux_.
 
 Bugs
 ----
+
+On RHEL platforms, the "nolock" option is always set when mounting
+(via autofs or the mount mode). This allows the script to run
+successfully on some platforms where the support services for locking
+has not been set up properly, but means those platforms where the
+support services are working cannot make use of locking.
 
 The unmount mode does not delete any of the user accounts or groups
 created by the mount mode.
