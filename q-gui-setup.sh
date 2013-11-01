@@ -114,13 +114,6 @@ if [ `id -u` != '0' ]; then
   exit 1
 fi
 
-# Check if VNC is already installed
-
-if [ -f '/etc/sysconfig/vncservers' ]; then
-  echo "$PROG: error: VNC server is already installed" >&2
-  exit 1
-fi
-
 # Check if user accounts already exist
 
 ERROR=
@@ -152,6 +145,10 @@ ping -c 1 "$HOSTNAME" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
   # Hostname not resolving: add entry for it in /etc/hosts file
 
+  if [ -z "$QUIET" ]; then
+    echo "Adding hostname to /etc/hosts: $HOSTNAME"
+  fi
+
   echo "127.0.0.1   $HOSTNAME" >> /etc/hosts
 
   # Check it now works
@@ -171,27 +168,51 @@ else
   YUM_QUIET_FLAG="-q"
 fi
 
-# Install X11
+# yum $YUM_QUIET_FLAG -y update || die
 
-if [ -z "$QUIET" ]; then
-  echo "Updating packages"
-fi
-yum $YUM_QUIET_FLAG -y update || die
+for GROUP in "X Window System" "Desktop" "Fonts"
+do
+  yum grouplist "$GROUP" | grep 'Installed Groups' > /dev/null
+  if [ $? -ne 0 ]; then
+    # Group not installed: install it
+    if [ -z "$QUIET" ]; then
+      echo "Installing group: $GROUP"
+    fi
+    yum $YUM_QUIET_FLAG -y groupinstall "$GROUP" || die
 
-if [ -z "$QUIET" ]; then
-  echo "Installing X Window System"
-fi
-yum $YUM_QUIET_FLAG -y groupinstall "X Window System" "Desktop" "Fonts" || die
+  else
+    # Group already installed
+    if [ -n "$VERBOSE" ]; then
+      echo "Group already installed: $GROUP"
+    fi
+  fi
+done
 
 # Install VNC server
 
-if [ -z "$QUIET" ]; then
-  echo "Installing VNC server"
-fi
-yum $YUM_QUIET_FLAG -y install "tigervnc-server" || die
+for PACKAGE in "tigervnc-server"
+do
+  rpm -q "$PACKAGE" > /dev/null
+  if [ $? -ne 0 ]; then
+    # Package not installed: install it
+
+    if [ -z "$QUIET" ]; then
+      echo "Installing package: $PACKAGE"
+    fi
+    yum $YUM_QUIET_FLAG -y install "$PACKAGE" || die
+
+  else
+    # Package already installed
+    if [ -n "$VERBOSE" ]; then
+      echo "Package already installed: $PACKAGE"
+    fi
+  fi
+done
+
+# Extra check that VNC server configuration file is present
 
 if [ ! -f '/etc/sysconfig/vncservers' ]; then
-  echo "$PROG: error: VNC server was not installed correctly" >&2
+  echo "$PROG: error: VNC server not installed correctly: config file missing" >&2
   exit 1
 fi
 
