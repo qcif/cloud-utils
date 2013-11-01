@@ -24,16 +24,17 @@ PROG=`basename $0`
 # Process command line arguments
 
 FORCE=
+PASSWORD=
 VERBOSE=
 QUIET=
 
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long help,output:,force,quiet,verbose --options ho:fqv -- "$@"`
+  ARGS=`getopt --name "$PROG" --long help,password:,force,quiet,verbose --options hp:fqv -- "$@"`
 else
   # Original getopt is available (no long option names nor whitespace)
-  ARGS=`getopt ho:fqv "$@"`
+  ARGS=`getopt hp:fqv "$@"`
 fi
 if [ $? -ne 0 ]; then
   echo "$PROG: usage error (use -h for help)" >&2
@@ -44,6 +45,7 @@ eval set -- $ARGS
 while [ $# -gt 0 ]; do
     case "$1" in
         -h | --help)     HELP=yes;;
+        -p | --password) PASSWORD="$2"; shift;;
         -f | --force)    FORCE=yes;;
         -q | --quiet)    QUIET=yes;;
         -v | --verbose)  VERBOSE=yes;;
@@ -53,12 +55,13 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -n "$HELP" ]; then
-  echo "Usage: $PROG [options] newUserNames..."
+  echo "Usage: $PROG [options] userNames..."
   echo "Options:"
-  echo "  -f | --force    run on untested operating system (use with caution)"
-  echo "  -q | --quiet    suppress status output"
-  echo "  -v | --verbose  output extra information"
-  echo "  -h | --help     show this message"
+  echo "  -p | --password str  use this VNC password instead of a random one"
+  echo "  -f | --force         run on untested system (use with caution)"
+  echo "  -q | --quiet         suppress status output"
+  echo "  -v | --verbose       output extra information"
+  echo "  -h | --help          show this message"
   exit 0
 fi
 
@@ -67,25 +70,6 @@ fi
 if [ $# -lt 1 ]; then
   echo "$PROG: usage error: missing usernames (use -h for help)" >&2
   exit 2
-fi
-
-# Check if all usernames are syntatically correct
-
-ERROR=
-for USERNAME in "$@"
-do
-  echo "$USERNAME" | grep '^[A-Za-z_][0-9A-Za-z_-]*$' > /dev/null
-  if [ $? -ne 0 ]; then
-    echo "Usage error: format not valid for a username: $USERNAME" >&2
-    ERROR=1 
-  fi
-done
-if [ -n "$ERROR" ]; then
-  exit 2
-fi
-
-if [ $# -gt 1 ]; then
-  echo "$PROG: warning: current implementation only uses first username" >&2
 fi
 
 #----------------------------------------------------------------
@@ -114,19 +98,19 @@ if [ `id -u` != '0' ]; then
   exit 1
 fi
 
-# Check if user accounts already exist
+# Check if all users exist
 
 ERROR=
 for USERNAME in "$@"
 do
-  grep "^$USERNAME:" /etc/passwd > /dev/null
-  if [ $? -eq 0 ]; then
-    echo "$PROG: error: user account already exists: $USERNAME" >&2
-    exit 1
+  id "$USERNAME" > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "Error: user does not exist: $USERNAME" >&2
+    ERROR=1
   fi
 done
 if [ -n "$ERROR" ]; then
-  exit 2
+  exit 1
 fi
 
 #----------------------------------------------------------------
@@ -190,6 +174,8 @@ done
 
 # Install VNC server
 
+INSTALLED_VNC_SERVER=
+
 for PACKAGE in "tigervnc-server"
 do
   rpm -q "$PACKAGE" > /dev/null
@@ -201,6 +187,8 @@ do
     fi
     yum $YUM_QUIET_FLAG -y install "$PACKAGE" || die
 
+    INSTALLED_VNC_SERVER=yes
+
   else
     # Package already installed
     if [ -n "$VERBOSE" ]; then
@@ -209,54 +197,125 @@ do
   fi
 done
 
-# Extra check that VNC server configuration file is present
+if [ -n "$INSTALLED_VNC_SERVER" ]; then
+  # Configure VNC server to start on boot up and run it now
 
-if [ ! -f '/etc/sysconfig/vncservers' ]; then
-  echo "$PROG: error: VNC server not installed correctly: config file missing" >&2
-  exit 1
+  if [ -z "$QUIET" ]; then
+    echo "Configuring VNC server to start at boot up"
+  fi
+  chkconfig vncserver on || die
+
+  # Start it
+
+  if [ -z "$QUIET" ]; then
+    echo "Starting VNC server"
+  fi
+  service vncserver start || die
+
+else
+  # Stop VNC server
+
+  service vncserver stop || die
 fi
 
 #----------------------------------------------------------------
 # Create user and configure VNC server
 
+VNC_CONFIG='/etc/sysconfig/vncservers'
+
+# Check that VNC server configuration file is present
+
+if [ ! -f "$VNC_CONFIG" ]; then
+  echo "$PROG: error: VNC server not installed correctly: config file missing: $VNC_CONFIG" >&2
+  exit 1
+fi
+
+# Strip out existing configurations
+
+mv "$VNC_CONFIG" "${VNC_CONFIG}.bak" || die
+grep -v ^VNCSERV "${VNC_CONFIG}.bak" > "$VNC_CONFIG" || die
+
+# Create new configurations
+
+VNC_PARAMS="-geometry 1024x768 -nolisten tcp -localhost"
+COUNT=0
+
+if [ -z "$QUIET" ]; then
+  echo
+  echo "---"
+fi
+
+VALUE=
+
 for USERNAME in "$@"
 do
   if [ -z "$QUIET" ]; then
-    echo "Creating user account: $USERNAME"
+    echo "User: $USERNAME"
+    echo "  VNC server $COUNT: port `expr 5900 + $COUNT`"
   fi
-  adduser "$USERNAME" || die
 
-  echo "VNCSERVERS=\"0:$USERNAME\"" >> /etc/sysconfig/vncservers
-  echo "VNCSERVERARGS[0]=\"-geometry 1024x768 -nolisten tcp -localhost\"" >> /etc/sysconfig/vncservers
+  # Build up list of display:user pairs
+  if [ -n "$VALUE" ]; then
+    VALUE="$VALUE "
+  fi
+  VALUE="$VALUE$COUNT:$USERNAME"
 
-  echo "Please supply a password to use as the VNC password for $USERNAME"
-  su "$USERNAME" -c vncpasswd || die
+  # VNC server arguments
+  echo "VNCSERVERARGS[$COUNT]=\"$VNC_PARAMS\"" >> $VNC_CONFIG
+
+  COUNT=`expr $COUNT + 1`
+
+  PWFILE="/home/$USERNAME/.vnc/passwd"
+  if [ ! -f "$PWFILE" ]; then
+    # VNC password file for user does not exist: create it
+
+    PWDIR=`dirname "$PWFILE"`
+    if [ ! -d "$PWDIR" ]; then
+      # Create directory as that user so owner and group are correct
+      su "$USERNAME" -c "mkdir \"$PWDIR\"" || die
+      chmod g-w "$PWDIR" || die
+      chmod o-w "$PWDIR" || die
+    fi
+
+    if [ -z "$PASSWORD" ]; then
+      # Make up a random password
+      # vncpasswd uses only the first 8 chars, so "6" binary bytes is enough
+      PASSWORD=`openssl rand -base64 6`
+    fi
+
+    if [ -z "$QUIET" ]; then
+      echo "  VNC password: setting with vncpasswd: $PASSWORD"
+    fi
+
+    su "$USERNAME" -c "touch \"$PWFILE\"" # create file as that user
+    chmod 600 "$PWFILE" || die
+
+    echo "$PASSWORD" | vncpasswd -f > "$PWFILE"
+
+  else
+    # VNC password file for user exists
+    if [ -z "$QUIET" ]; then
+      echo "  VNC password: using existing value"
+    fi
+  fi
 done
 
-
-#----------------------------------------------------------------
-# Configure VNC server to start on boot up and run it now
-
-chkconfig vncserver on || die
+echo "VNCSERVERS=\"$VALUE\"" >> $VNC_CONFIG
 
 if [ -z "$QUIET" ]; then
-  echo "Starting VNC server"
+  echo "---"
+  echo
 fi
+
+rm "${VNC_CONFIG}.bak" || die
+
+#----------------------------------------------------------------
+# Starting VNC server
+
 service vncserver start || die
 
 #----------------------------------------------------------------
 
-echo "Success"
-echo "  To use VNC, create a ssh tunnel to port 5900 of this machine and"
-echo "  run a VNC client (which will prompt for the password that was entered)."
-echo "  e.g. ssh -L 9999:localhost:5900 ec2-user@???.???.???.???"
-echo
-echo "  It is recommended that passwords be set on the new user accounts,"
-echo "  to unlock any screensavers that might run."
-for USERNAME in "$@"
-do
-  echo "      passwd $USERNAME"
-done
 exit 0
 
 #----------------------------------------------------------------
