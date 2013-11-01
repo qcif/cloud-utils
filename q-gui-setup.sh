@@ -205,13 +205,6 @@ if [ -n "$INSTALLED_VNC_SERVER" ]; then
   fi
   chkconfig vncserver on || die
 
-  # Start it
-
-  if [ -z "$QUIET" ]; then
-    echo "Starting VNC server"
-  fi
-  service vncserver start || die
-
 else
   # Stop VNC server
 

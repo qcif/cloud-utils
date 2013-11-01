@@ -1,8 +1,8 @@
 q-gui-setup
 ===========
 
-Setup X11 and a VNC server on a Q-Cloud virtual machine instance to
-run a graphical user interface.
+Setup X11 and VNC servers on to run a graphical user interface on
+RHEL-based systems (e.g. CentOS or Scientific Linux).
 
 Synopsis
 --------
@@ -39,7 +39,10 @@ passwords. It will only create new VNC passwords for users that do not
 have a VNC password.
 
 Note: This script can take a long time to run, because it has to
-download and install a number of _yum_ packages.
+download and install a large number of _yum_ packages. Depending on
+the speed of your machine, it could take between 10 minutes to 40
+minutes to run. To see the progress of the install, use the
+`--verbose` option.
 
 ### Options
 
@@ -57,10 +60,13 @@ download and install a number of _yum_ packages.
 ### Requirements
 
 This script has been designed to run on RedHat Enterprise Linux (RHEL)
-based distributions and has been tested on CentOS 6.4 64-bit and
-Scientific Linux.
+based distributions. It has been tested on CentOS 6.4 64-bit and
+Scientific Linux 6.4 64-bit. It does not work on other distributions,
+e.g. Ubuntu and Fedora.
 
-To force it to run on other RHEL-based distributions, use the `--force` option.
+To force it to run on untested distributions, use the `--force`
+option. There are no guarantees it will work on untested
+distributions.
 
 ### Security
 
@@ -138,22 +144,22 @@ through port 15901 and charlie through port 15902.
 Examples
 --------
 
-1. Create a VM instance running RHEL, CentOS or Scientific
+1. Create an instance running RHEL, CentOS or Scientific
    Linux. Note: the security groups must allow _ssh_ access.
 
-2. Login to the VM instance using _ssh_ and tunnel port 5900 on the VM
+2. Login to the instance using _ssh_ and tunnel port 5900 on the
    instance to a local port (using 15900 in this example).
 
         local$ ssh -L 15900:localhost:5900 ec2-user@130.102.xxx.xxx
 
-3. Put a copy of the _q-gui-setup.sh_ script onto the VM instance.
+3. Put a copy of the _q-gui-setup.sh_ script onto the instance.
 
         $ curl -O https://raw.github.com/qcif/cloud-utils/master/q-gui-setup.sh
         $ chmod a+x q-gui-setup.sh
 
 4. Run the script, providing it a list of at least one user account.
    Wait until the script finishes running (which can take over an hour
-   to run, depending on the processing power of your VM instance).
+   to run, depending on the processing power of your machine).
 
         $ ./q-gui-setup.sh neo
 
@@ -171,7 +177,7 @@ Examples
     For example, on Mac OS X, you can choose _Go_ > _Connect to Server_
     in the _Finder_, or run the following command from the _Terminal_:
 
-        local-mac$ open vnc://localhost:59000
+        local-mac$ open vnc://localhost:15900
 
      Enter the VNC password when prompted.
 
@@ -193,6 +199,18 @@ Environment
 -----------
 
 This script must be run with root privileges.
+
+Trouble shooting
+----------------
+
+### Logged out of window manager
+
+If you logged out of the window manager, restart the VNC server:
+
+    $ sudo services vncserver restart
+
+If there are multiple users with VNC servers, they will all be
+restarted.
 
 Files
 -----
