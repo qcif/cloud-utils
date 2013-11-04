@@ -405,7 +405,7 @@ if [ "$FLAVOUR" = 'rhel' ]; then
     check_ok
   fi
 
-  grep "^[^:]*:[^:]*:[^:]*:48:" /etc/passwd > /dev/null
+  grep "^[^:]*:[^:]*:48:" /etc/passwd > /dev/null
   if [ $? -ne 0 ]; then
     # User 48 does not exist: create it
     adduser --uid 48 --gid 48 --comment "Apache" \
@@ -419,7 +419,7 @@ if [ "$FLAVOUR" = 'rhel' ]; then
     # Note: admin user was 55931, but users now changed to 540xx
     ID_NUMBER=`expr 54000 + $NUM`
 
-    grep "^[^:]*:[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
+    grep "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
       adduser --uid "$ID_NUMBER" --comment "Allocation $ALLOC" "q$NUM"
@@ -436,7 +436,7 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     check_ok
   fi
 
-  grep "^[^:]*:[^:]*:[^:]*:48:" /etc/passwd > /dev/null
+  grep "^[^:]*:[^:]*:48:" /etc/passwd > /dev/null
   if [ $? -ne 0 ]; then
     # User 48 does not exist: create it
     adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
@@ -450,7 +450,7 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     NUM=`echo $ALLOC | sed s/Q0*//`
     ID_NUMBER=`expr 54000 + $NUM`
 
-    grep "^[^:]*:[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
+    grep "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
       adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet "q$NUM"
