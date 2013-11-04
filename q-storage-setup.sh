@@ -156,7 +156,7 @@ do
   elif [ "$NUM" -gt 999 ]; then
     # This will cause UID/GID to violate the 54nnn pattern and
     # the behaviour is not yet defined.
-    echo "$PROG: internal error: collections greater than 999 not supported" >&2
+    echo "$PROG: internal error: allocations greater than 999 not supported" >&2
     exit 3
   else
     echo $ALLOC | grep '^Q[0-9][0-9][0-9][0-9]$' > /dev/null
@@ -422,8 +422,7 @@ if [ "$FLAVOUR" = 'rhel' ]; then
     grep "^[^:]*:[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
-      adduser --uid "$ID_NUMBER" --comment "Collection $NUM" \
-              --no-create-home --shell /sbin/nologin "q$NUM"
+      adduser --uid "$ID_NUMBER" --comment "Allocation $ALLOC" "q$NUM"
       check_ok
     fi
   done
@@ -454,9 +453,7 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     grep "^[^:]*:[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
-      adduser --uid "$ID_NUMBER" --gecos "Collection $NUM" --quiet \
-              --no-create-home \
-              --shell /sbin/nologin --disabled-login "q$NUM"
+      adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet "q$NUM"
       check_ok
     fi
   done
