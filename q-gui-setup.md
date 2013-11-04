@@ -95,19 +95,21 @@ user).
 
 #### User login password
 
-A user login password should be set for the user account, because it
-will be required to unlock the screensaver.
+A user login password is not necessary. Access to the VNC server only
+requires the VNC password and access to the VNC server port. If the
+VNC server port is exposed to the external network, anyone can access
+it -- this is not recommended since VNC traffic is not encrypted, and
+the VNC servers have been configured so this will not work.  The VNC
+server port will have to be accessed from within the host. A login to
+any user account will allow a ssh tunnel to be established. That login
+can be to that VNC user's account or to a different account. For
+maximum security, that login should be authenticated using a ssh
+public key instead of a password.
 
-Strictly speaking, a user login password is not required for access to
-the VNC server. Access to the VNC server only requires the VNC
-password and access to the VNC server port. If the VNC server port is
-exposed to the external network, anyone can access it. If the VNC
-server port is not exposed to the external network, a login to any
-user account will allow a ssh tunnel to be established. That login can
-be to the VNC user's account using ssh public keys or login to a
-different account, so technically the user login password to the VNC
-user's account is not needed -- as long as the screensaver is
-disabled.
+One reason why a user login password might be required is for
+unlocking screensavers. If that is the only reason, it is better to
+simply disable the screen saver -- do this as soon as you connect to
+the VNC server the first time.
 
 #### SSH tunnel
 
@@ -140,6 +142,21 @@ by repeating the `-L` option:
 
 The VNC server for alice can be accessed through port 15900, bob
 through port 15901 and charlie through port 15902.
+
+Finishing
+---------
+
+When finished with using the GUI, simply close the VNC client.
+
+When you close the VNC client, the next time you connect to the VNC server
+it will show you the session as you left it. This is useful, because
+you can leave programs running and return to them later.
+
+Do not choose the "Log Out" menu item. That will close the Window
+Manager leaving no easy way to restart it, without restarting all the
+VNC servers (which is not nice if there are multiple users).
+
+    vm$ sudo service vncserver restart
 
 Examples
 --------
@@ -181,12 +198,15 @@ Examples
 
      Enter the VNC password when prompted.
 
-7. When finished, close the VNC client and then log out of the _ssh_
-   connection.
+7. Do this quickly: disable the screensaver. Choose them menu item
+   System > Preferences > Screensaver and uncheck the "Activate
+   screensaver when computer is idle" checkbox.
 
-When you close the VNC client, the next time you connect to the VNC server
-it will show you the session as you left it. This is useful, because
-you can leave programs running and return to them later.
+    If you don't do this and the screensaver starts, you will
+    need to have the user account's password to unlock it.
+
+8. When finished, close the VNC client and then log out of the _ssh_
+   connection.
 
 Additional software can be installed via the GUI or via the command
 line.  For example, install the Firefox Web browser with the command
