@@ -398,27 +398,28 @@ fi
 
 if [ "$FLAVOUR" = 'rhel' ]; then
 
-  grep :48: /etc/group > /dev/null
+  grep "^[^:]*:[^:]*:48:" /etc/group > /dev/null
   if [ $? -ne 0 ]; then
     # Group 48 does not exist: create it
-    groupadd --gid 48 webdav
+    groupadd --gid 48 apache
     check_ok
   fi
 
-  grep :48: /etc/passwd > /dev/null
+  grep "^[^:]*:[^:]*:[^:]*:48:" /etc/passwd > /dev/null
   if [ $? -ne 0 ]; then
     # User 48 does not exist: create it
-    adduser --uid 48 --gid 48 --comment "WebDAV" \
-            --no-create-home --shell /sbin/nologin webdav
+    adduser --uid 48 --gid 48 --comment "Apache" \
+            --no-create-home --shell /sbin/nologin apache
     check_ok
   fi
 
   for ALLOC in "$@"
   do
     NUM=`echo $ALLOC | sed s/Q0*//`
+    # Note: admin user was 55931, but users now changed to 540xx
     ID_NUMBER=`expr 54000 + $NUM`
 
-    grep ":$ID_NUMBER:" /etc/passwd > /dev/null
+    grep "^[^:]*:[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
       adduser --uid "$ID_NUMBER" --comment "Collection $NUM" \
@@ -429,19 +430,19 @@ if [ "$FLAVOUR" = 'rhel' ]; then
 
 elif [ "$FLAVOUR" = 'ubuntu' ]; then
 
-  grep :48: /etc/group > /dev/null
+  grep "^[^:]*:[^:]*:48:" /etc/group > /dev/null
   if [ $? -ne 0 ]; then
     # Group 48 does not exist: create it
-    addgroup --gid 48 --gecos "WebDAV" --quiet webdav
+    addgroup --gid 48 --gecos "Apache" --quiet apache
     check_ok
   fi
 
-  grep :48: /etc/passwd > /dev/null
+  grep "^[^:]*:[^:]*:[^:]*:48:" /etc/passwd > /dev/null
   if [ $? -ne 0 ]; then
     # User 48 does not exist: create it
-    adduser --uid 48 --gid 48 --gecos "WebDAV" --quiet \
+    adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
             --no-create-home \
-            --shell /sbin/nologin --disabled-login webdav
+            --shell /sbin/nologin --disabled-login apache
     check_ok
   fi
 
@@ -450,7 +451,7 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     NUM=`echo $ALLOC | sed s/Q0*//`
     ID_NUMBER=`expr 54000 + $NUM`
 
-    grep ":$ID_NUMBER:" /etc/passwd > /dev/null
+    grep "^[^:]*:[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
       adduser --uid "$ID_NUMBER" --gecos "Collection $NUM" --quiet \
