@@ -70,19 +70,32 @@ fi
 
 # Check arguments
 
-if [ $# -ne 0 ]; then
-  echo "$PROG: usage error: no arguments expected" >&2
+INTERACTIVE=yes
+
+if [ $# -eq 0 ]; then
+  INTERACTIVE=yes
+elif [ $# -eq 1 ]; then
+  if [ "$1" = '-y' -o "$1" = '--yes' ]; then
+    INTERACTIVE=
+  else
+    echo "Usage: $PROG [-y | --yes]" >&2
+    exit 2
+  fi
+else
+  echo "Usage: $PROG [-y | --yes]" >&2
   exit 2
 fi
 
 #----------------------------------------------------------------
 # Prompt user
 
-/bin/echo -n "Install ownCloud on this machine ($HOST) [yes/NO]? "
-read ANSWER
-if [ "$ANSWER" != 'yes' ]; then
-  echo "$PROG: aborted"
-  exit 1
+if [ -n "$INTERACTIVE" ]; then
+  /bin/echo -n "Install ownCloud on this machine ($HOST) [yes/NO]? "
+  read ANSWER
+  if [ "$ANSWER" != 'yes' ]; then
+    echo "$PROG: aborted"
+    exit 1
+  fi
 fi
 
 echo
