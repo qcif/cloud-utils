@@ -80,7 +80,7 @@ fi
 # Check arguments
 
 if [ $# -eq 0 ]; then
-  INTERACTIVE=yes
+  :
 elif [ $# -eq 1 ]; then
   if [ "$1" = '-y' -o "$1" = '--yes' ]; then
     INTERACTIVE=
