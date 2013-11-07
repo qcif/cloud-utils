@@ -68,9 +68,16 @@ if [ `id -u` != '0' ]; then
   exit 1
 fi
 
-# Check arguments
+# Detect if running from a pipe. For download and running "curl ... | sudo sh"
 
 INTERACTIVE=yes
+
+ls -l /proc/self/fd/0 | grep \/dev\/pts\/[0-9] > /dev/null
+if [ $? -ne 0 ]; then
+  INTERACTIVE=
+fi
+
+# Check arguments
 
 if [ $# -eq 0 ]; then
   INTERACTIVE=yes
