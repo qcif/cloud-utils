@@ -4,21 +4,23 @@ QCIF Cloud utilities
 Utilities for working with QCIF virtual machine instances and
 collection storage.
 
-**These scripts are in beta development.**
-
-		
 Scripts
 -------
 
-### q-storage-setup.sh
+### [q-storage-setup](blob/master/q-storage-setup.md)
 
 Setup a NFS client to mount RDSI storage.
 
-### q-gui-setup.sh
+### [q-gui-setup](blob/master/q-gui-setup.md)
 
 Setup X-Windows plus a VNC server.
 
-### q-image-create.sh
+### [q-owncloud](blob/master/q-owncloud.md)
+
+Setup _ownCloud_ on a Ubuntu virtual machine instance running on the
+QCIF cloud computing platform.
+
+### [q-image-create](blob/master/q-image-create.md)
 
 Utility to help with the process of creating a virtual machine image
 for NeCTAR.
