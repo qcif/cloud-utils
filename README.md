@@ -7,20 +7,20 @@ collection storage.
 Scripts
 -------
 
-### [q-storage-setup](blob/master/q-storage-setup.md)
+### [q-storage-setup](q-storage-setup.md)
 
 Setup a NFS client to mount RDSI storage.
 
-### [q-gui-setup](blob/master/q-gui-setup.md)
+### [q-gui-setup](q-gui-setup.md)
 
 Setup X-Windows plus a VNC server.
 
-### [q-owncloud](blob/master/q-owncloud.md)
+### [q-owncloud](q-owncloud.md)
 
 Setup _ownCloud_ on a Ubuntu virtual machine instance running on the
 QCIF cloud computing platform.
 
-### [q-image-create](blob/master/q-image-create.md)
+### [q-image-create](q-image-create.md)
 
 Utility to help with the process of creating a virtual machine image
 for NeCTAR.
