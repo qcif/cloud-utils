@@ -60,9 +60,9 @@ releases of Ubuntu do not have the _ownCloud_ package.
 Diagnosis
 ---------
 
-### Browser cannot contact to server
+### Browser failed to open page
 
-Check firewalls permit port 443 traffic.
+Check firewalls permit access to port 443 (for HTTPS connections).
 
 ### Not found. The requested URL ... was not found on this server
 
