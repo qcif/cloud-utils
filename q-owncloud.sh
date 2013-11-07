@@ -97,9 +97,9 @@ fi
 # Prompt user
 
 if [ -n "$INTERACTIVE" ]; then
-  /bin/echo -n "Install ownCloud on this machine ($HOST) [yes/NO]? "
+  /bin/echo -n "Install ownCloud on this machine ($HOST) [y/N]? "
   read ANSWER
-  if [ "$ANSWER" != 'yes' ]; then
+  if [ "$ANSWER" != 'y' ]; then
     echo "$PROG: aborted"
     exit 1
   fi
