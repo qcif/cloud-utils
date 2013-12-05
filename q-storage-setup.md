@@ -47,7 +47,7 @@ argument.
 
 The `storageID` must be one or more collection names. These must be of
 the form "Qnnnn" where _n_ is a digit (except for Q01, Q02, Q03, Q04,
-Q05 and Q16, which only have two digits.
+Q05 and Q16, which only have two digits).
 
 The first time this script is used, it might take a few minutes to
 run. This is because it needs to download and install the dependent

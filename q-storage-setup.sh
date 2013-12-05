@@ -133,20 +133,25 @@ fi
 ERROR=
 for ALLOC in "$@"
 do
+  # Check syntax: is it "Q" followed by one or more digits
   echo $ALLOC | grep '^Q[0-9][0-9]*$' > /dev/null
   if [ $? -ne 0 ]; then
     echo "Usage error: bad storageID name (expecting Qnnnn or Qnn): $ALLOC" >&2
     ERROR=1
     continue
   fi
+  # Extract NUM as the number part (without leading zeros)
   NUM=`echo $ALLOC | sed s/Q0*//`
+  # Special check for Q0, Q00, Q000, etc. which slips through the above check
   echo $NUM | grep '^[0-9][0-9]*$' > /dev/null
   if [ $? -ne 0 ]; then
     echo "Usage error: bad storageID name: zero is not valid: $ALLOC" >&2
     ERROR=1
     continue
   fi
-  if [ "$NUM" -le 5 ]; then
+  # Check correct number of leading zeros
+  if [ "$NUM" -le 5 -o "$NUM" -eq 16 ]; then
+    # These numbers are the exception and needs to be Qnn
     echo $ALLOC | grep '^Q[0-9][0-9]$' > /dev/null
     if [ $? -ne 0 ]; then
       echo "Usage error: storageID name should be Qnn: $ALLOC" >&2
@@ -159,6 +164,7 @@ do
     echo "$PROG: internal error: allocations greater than 999 not supported" >&2
     exit 3
   else
+    # These numbers follow the standard pattern of Qnnnn
     echo $ALLOC | grep '^Q[0-9][0-9][0-9][0-9]$' > /dev/null
     if [ $? -ne 0 ]; then
       echo "Usage error: storageID name should be Qnnnn: $ALLOC" >&2
