@@ -199,6 +199,7 @@ if [ -z "$FORCE" ]; then
     DISTRO=unknown
   fi
   if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
+       "$DISTRO" = 'CentOS release 6.5 (Final)' -o \
        "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' ]; then
     FLAVOUR=rhel
   elif [ "$DISTRO" = 'Ubuntu 13.04' -o \
