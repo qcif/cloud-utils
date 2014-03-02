@@ -150,9 +150,9 @@ do
     continue
   fi
   # Check correct number of leading zeros
-  if [ "$NUM" -eq 1 -o
-       "$NUM" -eq 2 -o
-       "$NUM" -eq 3 -o
+  if [ "$NUM" -eq 1 -o \
+       "$NUM" -eq 2 -o \
+       "$NUM" -eq 3 -o \
        "$NUM" -eq 16 ]; then
     # These numbers are the exception and needs to be Qnn
     echo $ALLOC | grep '^Q[0-9][0-9]$' > /dev/null
