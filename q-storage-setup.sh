@@ -25,7 +25,7 @@ DEFAULT_AUTO_MOUNT_DIR="/data"
 
 NFS_SERVER=10.255.100.50
 
-MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=15,retrans=5"
+MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 MOUNT_OPTIONS_RHEL=nolock
 MOUNT_OPTIONS_UBUNTU=
 
