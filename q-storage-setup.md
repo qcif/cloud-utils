@@ -96,8 +96,13 @@ Examples
 The easiest way to obtain the latest copy of the script is
 to download it directly from GitHub:
 
-    $ curl -O https://raw.github.com/qcif/cloud-utils/master/q-storage-setup.sh
+    $ curl -O https://raw.githubusercontent.com/qcif/cloud-utils/master/q-storage-setup.sh
     $ chmod a+x q-storage-setup.sh
+
+Note: the URL being downloaded is the _raw_ file from GitHub, which
+can change when GitHub reorganises their service. If the URL does not
+work, go to this project on GitHub and locate the raw link to the
+q-storage-setup.sh file.
 
 ### Ad hoc testing
 
