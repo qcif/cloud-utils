@@ -1,15 +1,18 @@
-QCIF Cloud utilities
-====================
+QRIScloud utilities
+===================
 
-Utilities for working with QCIF virtual machine instances and
-collection storage.
+Utilities for working with the QRIScloud virtual machine instances and
+data storage.  QRIScloud is a set of services provided by the
+_Queensland Cyber Infrastructure Foundation_
+([QCIF](http://www.qcif.edu.au)).
 
 Scripts
 -------
 
 ### [q-storage-setup](q-storage-setup.md)
 
-Setup a NFS client to mount RDSI storage.
+Connects QRIScloud compute to storage.  Setup a NFS client in a NeCTAR
+virtual machine instance to mount RDSI storage.
 
 ### [q-gui-setup](q-gui-setup.md)
 

@@ -23,7 +23,10 @@ PROG=`basename $0`
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
-NFS_SERVER=10.255.100.50
+NFS_SERVER_STAGE1=10.255.100.50
+NFS_SERVER_STAGE2=10.255.120.200
+NFS_PATH_STAGE1=/collection
+NFS_PATH_STAGE2=/tier2a
 
 MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 MOUNT_OPTIONS_RHEL=nolock
@@ -39,16 +42,17 @@ VERBOSE=
 DO_AUTOFS=
 DO_MOUNT=
 DO_UMOUNT=
+STAGE=
 DIR=
 FORCE=
 
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,verbose --options hd:amuf:v -- "$@"`
+  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,stage:,verbose --options hd:amuf:s:v -- "$@"`
 else
   # Original getopt is available (no long option names nor whitespace)
-  ARGS=`getopt hd:amuf:v "$@"`
+  ARGS=`getopt hd:amuf:s:v "$@"`
 fi
 if [ $? -ne 0 ]; then
   echo "$PROG: usage error (use -h for help)" >&2
@@ -61,6 +65,7 @@ while [ $# -gt 0 ]; do
         -a | --autofs)   DO_AUTOFS=yes;;
         -m | --mount)    DO_MOUNT=yes;;
         -u | --umount)   DO_UMOUNT=yes;;
+        -s | --stage)    STAGE="$2"; shift;;
         -d | --dir)      DIR="$2"; shift;;
         -f | --force)    FORCE="$2"; shift;;
         -v | --verbose)  VERBOSE=yes;;
@@ -76,6 +81,8 @@ if [ -n "$HELP" ]; then
   echo "  -a | --autofs     configure and use autofs mode (default)"
   echo "  -m | --mount      perform ad hoc mount mode"
   echo "  -u | --umount     perform ad hoc unmount mode"
+  echo
+  echo "  -s | --stage name which NFS server to connect to (stage1 or stage2)"
   echo
   echo "  -d | --dir name   directory containing mount points"
   echo "                    default for autofs: $DEFAULT_AUTO_MOUNT_DIR"
@@ -178,6 +185,52 @@ done
 if [ -n "$ERROR" ]; then
   exit 2
 fi
+
+#----------------
+# Stage
+# Note: must do this after determining ALLOC is correct
+
+# Check/determine stage
+
+if [ -z "$STAGE" ]; then
+  # Attempt to automatically determine which NFS server to use
+
+  ip -f inet addr | grep '203\.101\.' >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    # Has an IP address in the Stage 2 facility
+    STAGE=stage2
+  else
+    ip -f inet addr | grep '130\.102\.' >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+      # Has an IP address in the Stage 1 facility
+      STAGE=stage1
+    fi
+  fi
+
+  if [ -z "$STAGE" ]; then
+    echo "$PROG: error: cannot determine stage (please specify with --stage)" >&2
+    exit 2
+  fi
+  
+fi
+
+# Set parameters based on stage
+
+if [ "$STAGE" = 'stage1' ]; then
+
+  NFS_SERVER=$NFS_SERVER_STAGE1
+  NFS_PATH="$NFS_PATH_STAGE1/$ALLOC/$ALLOC"
+
+elif [ "$STAGE" = 'stage2' ]; then
+
+  NFS_SERVER=$NFS_SERVER_STAGE2
+  NFS_PATH="$NFS_PATH_STAGE2/$ALLOC/$ALLOC"
+
+else
+  echo "$PROG: usage error: unknown stage (expecting 'stage1' or 'stage2'): $STAGE" >&2
+  exit 2
+fi
+
 
 #----------------------------------------------------------------
 # Check pre-conditions
@@ -335,7 +388,7 @@ fi
 
 ping -c 1 $NFS_SERVER > /dev/null
 if [ $? -ne 0 ]; then
-  echo "$PROG: error: cannot contact server: $NFS_SERVER" >&2
+  echo "$PROG: error: cannot ping NFS server: $NFS_SERVER" >&2
   if [ -z "$I_CONFIGURED_ETH1" ]; then
     echo "$PROG: please check $ETH1_CFG" >&2
   fi
@@ -491,10 +544,9 @@ if [ -n "$DO_MOUNT" ]; then
     fi
     # Perform the mount operation
     if [ -n "$VERBOSE" ]; then
-      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_SERVER:/collection/$ALLOC/$ALLOC\" \"$DIR/$ALLOC\""
+      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_SERVER:$NFS_PATH\" \"$DIR/$ALLOC\""
     fi
-    mount -t nfs -o "$MOUNT_OPTIONS" \
-       "$NFS_SERVER:/collection/$ALLOC/$ALLOC" "$DIR/$ALLOC"
+    mount -t nfs -o "$MOUNT_OPTIONS" "$NFS_SERVER:$NFS_PATH" "$DIR/$ALLOC"
     check_ok
   done 
   exit 0 # done for this mode
@@ -552,7 +604,7 @@ check_ok
 
 for ALLOC in "$@"
 do
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_SERVER:/collection/$ALLOC/$ALLOC" >> "$DMAP"
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_SERVER:$NFS_PATH" >> "$DMAP"
   check_ok
 done
 

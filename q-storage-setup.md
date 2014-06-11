@@ -1,7 +1,7 @@
 q-storage-setup
 ===============
 
-Setup VM instances to NFS mount Q-cloud collection storage.
+Setup a QRIScloud virtual machine instance to NFS mount QRIScloud storage.
 
 Synopsis
 --------
@@ -9,6 +9,7 @@ Synopsis
     q-storage-setup.sh
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
         [ -d | --dir dirname] [ -f | --force flavour]
+        [ -s | --stage name]
         [ -v | --verbose ] [ -h | --help ] storageID {storageID...}
 
 Description
@@ -17,9 +18,9 @@ Description
 This script operates in one of four modes. The mode is set by using one
 of these options:
 
-- `-a | --autofs` configure _autofs_ to automatically mount the collection storage.
+- `-a | --autofs` configure _autofs_ to automatically mount the storage.
 
-- `-m | --mount` runs the mount command to manually mount the collection storage.
+- `-m | --mount` runs the mount command to manually mount the storage.
 
 - `-u | --umount` runs the umount command to reverse the action of the mount command.
 
@@ -43,9 +44,18 @@ automatic detection fails, force it to assume a particular
 distribution by using this option with `rhel` or `ubuntu` as the
 argument.
 
+- `-s | --stage facility` sets the facility being used. The
+facility must either be "stage1" or "stage2". This option is normally
+not needed, since this script will try to automatically detect which
+stage it is running on (by examining the localhost's IP address).  It
+is only needed if that automatic detection does not work
+properly. Note: both the compute (i.e. the VM instance this script is
+run on) and the storage allocation must be in the same facility. You
+cannot NFS mount storage allocations from a different facility.
+
 - `-v | --verbose` show extra information.
 
-The `storageID` must be one or more collection names. These must be of
+The `storageID` must be one or more storage allocation names. These must be of
 the form "Qnnnn" where _n_ is a digit (except for Q01, Q02, Q03 and
 Q16, which only have two digits).
 
@@ -56,9 +66,9 @@ running.
 
 ### Configure autofs mode
 
-This mode configures _autofs_ to NFS mount the specified collection
-storage. Use this mode to setup collection storage for production use.
-The mounts will be re-established if the operating system is rebooted.
+This mode configures _autofs_ to NFS mount the specified storage. Use
+this mode to setup the storage for production use.  The mounts will be
+re-established if the operating system is rebooted.
 
 If necessary, it also installs the necessary packages and configures the
 private network interface. Groups and users are also created.
@@ -70,9 +80,9 @@ encountered.
 
 ### Mount mode
 
-This mode runs an ad hoc mount command to NFS mount the specified
-collection storage. Use this mode to test whether collection storage
-can be successfully mounted.
+This mode runs an _ad hoc_ mount command to NFS mount the specified
+storage. Use this mode to test whether storage can be successfully
+mounted.
 
 If necessary, it also installs the necessary packages and configures the
 private network interface. Groups and users are also created.
@@ -81,7 +91,7 @@ Undo the mounts created by the mount mode using the unmount mode (see below).
 
 ### Unmount mode
 
-This mode unmounts ad hoc mounted collection storage. Use this mode to
+This mode unmounts _ad hoc_ mounted storage. Use this mode to
 reverse the actions of the mount mode (see above).
 
 ### Help mode
@@ -106,7 +116,7 @@ q-storage-setup.sh file.
 
 ### Ad hoc testing
 
-Mount collection Q0039, examine its contents and unmount it. Since the
+Mount storage allocation Q0039, examine its contents and unmount it. Since the
 script reqires root privileges, the _sudo_ command is used.
 
     $ sudo ./q-storage-setup.sh --mount Q0039
@@ -143,10 +153,11 @@ Files
 Diagnosis
 ---------
 
-### Interface eth1 not found: not running on Q-Cloud?
+### Interface eth1 not found: not running on QRIScloud?
 
-Collection storage can only be NFS mounted from virtual machine
-instances running on the Queensland node. The current system is
+QRIScloud storage allocations can only be NFS mounted from virtual
+machine instances running in QRIScloud (i.e. either on the stage 1
+"qld" or stage 2 "QRIScloud" availability zone). The current system is
 not running on the Queensland node.
 
 ### dhclieht(...) is already running - exiting
