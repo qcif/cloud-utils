@@ -37,12 +37,13 @@ of `/data` is used if this option is not specified.
 
 
 - `-f | --force flavour` forces use of commands for a given flavour of
-operating system.  This script has been designed to work with both
-_Red Hat Enterprise Linux_ or _Ubuntu_ based Linux distributions, and
-automatically detects which distribution it is running on. If the
-automatic detection fails, force it to assume a particular
-distribution by using this option with `rhel` or `ubuntu` as the
-argument.
+operating system.  This script has been tested with particular
+versions of _Red Hat Enterprise Linux_ or _Ubuntu_ based Linux
+distributions. It attempts to automatically detects if it is running
+on a tested Linux distribution. If the automatic detection fails or
+you want to take the risk of running it on an untested distribution,
+force it to use the commands for a particular distribution by using
+this option with `RHEL` or `ubuntu` as the argument.
 
 - `-s | --stage facility` sets the facility being used. The
 facility must either be "stage1" or "stage2". This option is normally
@@ -144,6 +145,19 @@ This script must be run with root privileges.
 You might want to update existing packages before running this
 script. In RHEL, run "yum update". In Ubuntu, run "apt-get update".
 
+Supported distributions
+-----------------------
+
+This script has been tested on the following distributions (as
+installed from the NeCTAR official images):
+
+- CentOS 6.4 64-bit
+- CentOS 6.5 64-bit
+- Scientific Linux 6.4 64-bit
+- Ubuntu 12.10 64-bit
+- Ubuntu 13.04 64-bit
+- Ubuntu 14.04 (Trusty) amd64 (see _diagnosis_ for addition setup)
+
 Files
 -----
 
@@ -160,12 +174,75 @@ machine instances running in QRIScloud (i.e. either on the stage 1
 "qld" or stage 2 "QRIScloud" availability zone). The current system is
 not running on the Queensland node.
 
-### dhclieht(...) is already running - exiting
+### dhclient(...) is already running - exiting
 
 This error has been seen on Fedora 18.
 
 Just re-run the script a second time, with the same parameters, and it
 will work.
+
+### Cannot access /data/Q...: no such file or directory
+
+The most common cause is the virtual machine instance has not been
+given permission to mount that particular storage allocation. Please
+contact QCIF support.
+
+Try to manually mount the storage (using the `--mount` option) and see
+if there are any error messages.
+
+Alternatively add `OPTIONS="--debug"` to the _/etc/sysconfig/autofs_
+file, restart _autofs_ (`sudo service autofs restart`), attempt to
+access the mounted directory and then examine _/var/log/messages_.
+
+### Cannot determine stage
+
+The automatic detection of whether the VM instance is running in
+QRIScloud stage 1 or QRIScloud stage 2 failed.
+
+Before explicitly specifying a stage, check that the VM instance is
+running in QRIScloud. The automatic detection probably failed because
+the VM instance is not running in QRIScloud at all, in which case NFS
+mounting cannot work (even if a stage is explicitly specified).
+
+### Cannot ping NFS server
+
+Check the second network interface (usually eth1) on the virtual
+machine instance has been activated and has been assigned a 10.255.x.x
+IP address.
+
+    ip -f inet addr
+
+If it does not have an IP address, either run the DHCP client:
+
+    sudo dhclient eth1
+
+Or for a more permanent solution, edit the network configuration to
+ensure the DHCP client is used on startup.
+
+### stop: Job failed while stopping ... start: Job is already running: networking
+
+The second network interface is not setup. See "Cannot ping NFS
+server" above.
+
+### Package '...' has no installation candidate
+
+The _apt-get_ package manager has not been properly configured.
+Update it:
+
+    sudo apt-get update
+
+### NeCTAR Ubuntu 14.04 (Trusty) amd64
+
+The "NeCTAR Ubuntu 14.04 (Trusty) amd64" NeCTAR official image
+(updated 2014-06-09 11:09:01) requires additional setup before this
+script can be used:
+
+1. The second network interface needs to be activated and assigned
+   an IP address. See "Cannot ping NFS server" above.
+
+2. The _apt-get_ package manager needs to be initialized.
+   See "Package '...' has no installation candidate" above.
+
 
 See also
 --------
@@ -183,6 +260,13 @@ support services are working cannot make use of locking.
 
 The unmount mode does not delete any of the user accounts or groups
 created by the mount mode.
+
+This script cannot remove all the mounts it creates. While it can
+change the mounts to a new set of one or more storage allocation
+names, that new set cannot be empty.  Removing all mounts can be done
+manually: editing the _/etc/auto.master_ file, optionally deleting the
+_/etc/auto.qcloud_ file, and restarting _autofs_ (by running `service
+autofs restart`).
 
 Contact
 -------

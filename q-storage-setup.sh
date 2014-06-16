@@ -87,7 +87,7 @@ if [ -n "$HELP" ]; then
   echo "  -d | --dir name   directory containing mount points"
   echo "                    default for autofs: $DEFAULT_AUTO_MOUNT_DIR"
   echo "                    default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR"
-  echo "  -f | --force flv  use commands for given flavour of OS"
+  echo "  -f | --force flv  set target distribution of OS (RHEL or ubuntu)"
   echo "  -v | --verbose    show extra information"
   echo "  -h | --help       show this message"
   exit 0
@@ -113,8 +113,12 @@ if [ -n "$DO_MOUNT" -o -n "$DO_UMOUNT" ]; then
   if [ -z "$DIR" ]; then
     DIR="$DEFAULT_ADHOC_MOUNT_DIR"
   fi
-  if [ ! -d "$DIR" ]; then
+  if [ ! -e "$DIR" ]; then
     echo "$PROG: error: directory does not exist: $DIR" >&2
+    exit 1
+  fi
+  if [ ! -d "$DIR" ]; then
+    echo "$PROG: error: not a directory: $DIR" >&2
     exit 1
   fi
 else
@@ -195,6 +199,12 @@ fi
 if [ -z "$STAGE" ]; then
   # Attempt to automatically determine which NFS server to use
 
+  which ip >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "$PROG: error: command not available: ip" >&2
+    exit 1
+  fi
+
   ip -f inet addr | grep '203\.101\.' >/dev/null 2>&1
   if [ $? -eq 0 ]; then
     # Has an IP address in the Stage 2 facility
@@ -219,12 +229,12 @@ fi
 if [ "$STAGE" = 'stage1' ]; then
 
   NFS_SERVER=$NFS_SERVER_STAGE1
-  NFS_PATH="$NFS_PATH_STAGE1/$ALLOC/$ALLOC"
+  NFS_PATH="$NFS_PATH_STAGE1"
 
 elif [ "$STAGE" = 'stage2' ]; then
 
   NFS_SERVER=$NFS_SERVER_STAGE2
-  NFS_PATH="$NFS_PATH_STAGE2/$ALLOC/$ALLOC"
+  NFS_PATH="$NFS_PATH_STAGE2"
 
 else
   echo "$PROG: usage error: unknown stage (expecting 'stage1' or 'stage2'): $STAGE" >&2
@@ -257,9 +267,10 @@ if [ -z "$FORCE" ]; then
   if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
        "$DISTRO" = 'CentOS release 6.5 (Final)' -o \
        "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' ]; then
-    FLAVOUR=rhel
+    FLAVOUR=RHEL
   elif [ "$DISTRO" = 'Ubuntu 13.04' -o \
-         "$DISTRO" = 'Ubuntu 12.10' ]; then
+         "$DISTRO" = 'Ubuntu 12.10' -o \
+         "$DISTRO" = 'Ubuntu 14.04 LTS' ]; then
     FLAVOUR=ubuntu
   else
     echo "$PROG: error: unsupported distribution: $DISTRO (use --force?)"
@@ -267,8 +278,8 @@ if [ -z "$FORCE" ]; then
   fi
 else
   FLAVOUR="$FORCE"
-  if [ "$FLAVOUR" != 'rhel' -a "$FLAVOUR" != 'ubuntu' ]; then
-    echo "$PROG: error: unsupported flavour (expecting rhel or ubuntu): $FLAVOUR" >&2
+  if [ "$FLAVOUR" != 'RHEL' -a "$FLAVOUR" != 'ubuntu' ]; then
+    echo "$PROG: error: unsupported flavour (expecting \"RHEL\" or \"ubuntu\"): $FLAVOUR" >&2
     exit 2
   fi
 fi
@@ -280,12 +291,12 @@ fi
 
 #----------------------------------------------------------------
 
-if [ $FLAVOUR = 'rhel' ]; then
+if [ $FLAVOUR = 'RHEL' ]; then
   MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_RHEL"
 elif [ $FLAVOUR = 'ubuntu' ]; then
   MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_UBUNTU"
 else
-  echo "$PROG: internal error" >&2
+  echo "$PROG: internal error: unknown flavour: $FLAVOUR" >&2
   exit 3
 fi
 
@@ -301,6 +312,12 @@ check_ok () {
 #----------------------------------------------------------------
 # Check for existance of private network interface
 
+which ip >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "$PROG: error: command not available: ip" >&2
+  exit 1
+fi
+
 ip link show | grep ' eth1:' > /dev/null
 if [ $? -ne 0 ]; then
   echo "$PROG: interface eth1 not found: not running on Q-Cloud?" >&2
@@ -310,7 +327,7 @@ fi
 #----------------------------------------------------------------
 # Configure private network interface
 
-if [ "$FLAVOUR" = 'rhel' ]; then
+if [ "$FLAVOUR" = 'RHEL' ]; then
 
   ETH1_CFG=/etc/sysconfig/network-scripts/ifcfg-eth1
 
@@ -367,6 +384,8 @@ pre-up /sbin/ifconfig eth1 mtu 9000
 EOF
     check_ok
 
+    # Caution: the following is not correct, since it will restart
+    # eth0 too and the user is most likely ssh-ing in to run this script!
     service networking restart
     check_ok
   fi 
@@ -398,7 +417,7 @@ fi
 #----------------------------------------------------------------
 # Install NFS client
 
-if [ "$FLAVOUR" = 'rhel' ]; then
+if [ "$FLAVOUR" = 'RHEL' ]; then
 
   # nfs-utils
   rpm -q nfs-utils > /dev/null
@@ -429,7 +448,9 @@ if [ -n "$DO_UMOUNT" ]; then
   for ALLOC in "$@"
   do
     if [ -d "$DIR/$ALLOC" ]; then
-      # Attempt to unmount
+
+      # Attempt to unmount it
+
       if [ -n "$VERBOSE" ]; then
         echo "umount \"$DIR/$ALLOC\""
       fi
@@ -437,11 +458,14 @@ if [ -n "$DO_UMOUNT" ]; then
       if [ $? -ne 0 ]; then
         ERROR=yes
       fi
-      # Attempt to remote the individual mount directory
+
+      # Attempt to remove the individual mount directory
+
       rmdir "$DIR/$ALLOC"
       if [ $? -ne 0 ]; then
         ERROR=yes
       fi
+
     else
       if [ -n "$VERBOSE" ]; then
         echo "$PROG: warning: mount directory does not exist: $DIR/$ALLOC"
@@ -459,7 +483,7 @@ fi
 #----------------------------------------------------------------
 # Create group and users (needed for both ad hoc mounting and autofs)
 
-if [ "$FLAVOUR" = 'rhel' ]; then
+if [ "$FLAVOUR" = 'RHEL' ]; then
 
   grep "^[^:]*:[^:]*:48:" /etc/group > /dev/null
   if [ $? -ne 0 ]; then
@@ -504,7 +528,8 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     # User 48 does not exist: create it
     adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
             --no-create-home \
-            --shell /sbin/nologin --disabled-login apache
+            --shell /sbin/nologin --disabled-login \
+            "apache"
     check_ok
   fi
 
@@ -516,7 +541,9 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     grep "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd > /dev/null
     if [ $? -ne 0 ]; then
       # User does not exist: create it
-      adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet "q$NUM"
+      adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet \
+              --disabled-password \
+              "q$NUM"
       check_ok
     fi
   done
@@ -530,25 +557,51 @@ fi
 # Ad hoc mounting
 
 if [ -n "$DO_MOUNT" ]; then
-  # Create directory containing mounts (if it does not exist)
-  if [ ! -e "$DIR" ]; then
-    mkdir "$DIR"
-    check_ok
-  fi
+
+  ERROR=
+
   for ALLOC in "$@"
   do
     # Create individual mount directory
+
+    I_CREATED_DIRECTORY=
     if [ ! -e "$DIR/$ALLOC" ]; then
       mkdir "$DIR/$ALLOC"
-      check_ok
+      if [ $? -ne 0 ]; then
+        echo "$PROG: error: could not create mount point: $DIR/$ALLOC" >&2
+        ERROR=yes
+        continue
+      fi
+      I_CREATED_DIRECTORY=yes
+    else
+      if [ ! -d "$DIR/$ALLOC" ]; then
+        echo "$PROG: error: mount point is not a directory: $DIR/$ALLOC" >&2
+        ERROR=yes
+        continue
+      fi
     fi
+
     # Perform the mount operation
+
     if [ -n "$VERBOSE" ]; then
-      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_SERVER:$NFS_PATH\" \"$DIR/$ALLOC\""
+      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_SERVER:$NFS_PATH/$ALLOC/$ALLOC\" \"$DIR/$ALLOC\""
     fi
-    mount -t nfs -o "$MOUNT_OPTIONS" "$NFS_SERVER:$NFS_PATH" "$DIR/$ALLOC"
-    check_ok
+
+    mount -t nfs -o "$MOUNT_OPTIONS" "$NFS_SERVER:$NFS_PATH/$ALLOC/$ALLOC" "$DIR/$ALLOC"
+    if [ $? -ne 0 ]; then
+      if [ -n "$I_CREATED_DIRECTORY" ]; then
+        rmdir "$DIR/$ALLOC" # clean up
+      fi
+      echo "$PROG: mount failed for $ALLOC" >&2
+      ERROR=yes
+      continue
+    fi
   done 
+
+  if [ -n "$ERROR" ]; then
+    exit 1
+  fi
+
   exit 0 # done for this mode
 fi
 
@@ -558,7 +611,7 @@ fi
 # yum -y $QUIET_FLAG update
 # apt-get update
 
-if [ "$FLAVOUR" = 'rhel' ]; then
+if [ "$FLAVOUR" = 'RHEL' ]; then
 
   # Install autofs
 
@@ -604,7 +657,7 @@ check_ok
 
 for ALLOC in "$@"
 do
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_SERVER:$NFS_PATH" >> "$DMAP"
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_SERVER:$NFS_PATH/$ALLOC/$ALLOC" >> "$DMAP"
   check_ok
 done
 
