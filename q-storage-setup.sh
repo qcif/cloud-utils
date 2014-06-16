@@ -266,14 +266,16 @@ if [ -z "$FORCE" ]; then
   fi
   if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
        "$DISTRO" = 'CentOS release 6.5 (Final)' -o \
-       "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' ]; then
+       "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' -o \
+       "$DISTRO" = 'Scientific Linux release 6.5 (Carbon)' ]; then
     FLAVOUR=RHEL
-  elif [ "$DISTRO" = 'Ubuntu 13.04' -o \
-         "$DISTRO" = 'Ubuntu 12.10' -o \
+  elif [ "$DISTRO" = 'Ubuntu 12.10' -o \
+         "$DISTRO" = 'Ubuntu 13.04' -o \
+         "$DISTRO" = 'Ubuntu 13.10' -o \
          "$DISTRO" = 'Ubuntu 14.04 LTS' ]; then
     FLAVOUR=ubuntu
   else
-    echo "$PROG: error: unsupported distribution: $DISTRO (use --force?)"
+    echo "$PROG: error: unsupported distribution: $DISTRO (use --force RHEL|ubuntu)"
     exit 1
   fi
 else
@@ -318,9 +320,9 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-ip link show | grep ' eth1:' > /dev/null
+ip link show dev eth1 > /dev/null
 if [ $? -ne 0 ]; then
-  echo "$PROG: interface eth1 not found: not running on Q-Cloud?" >&2
+  echo "$PROG: interface eth1 not found: not running on QRIScloud?" >&2
   exit 1
 fi
 
@@ -339,8 +341,6 @@ if [ "$FLAVOUR" = 'RHEL' ]; then
     cat > "$ETH1_CFG" <<EOF
 DEVICE="eth1"
 BOOTPROTO="dhcp"
-MTU="9000"
-IPV6_MTU="9000"
 #NM_CONTROLLED="yes"
 ONBOOT="yes"
 TYPE="Ethernet"
@@ -376,10 +376,9 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
     # eth1 not yet configured
     cat >> "$IF_FILE" <<EOF
 
-# The secondary network interface (connects to internal network)
+# The secondary network interface (connects to QRIScloud internal network)
 auto eth1
 iface eth1 inet dhcp
-pre-up /sbin/ifconfig eth1 mtu 9000
 
 EOF
     check_ok
@@ -402,9 +401,9 @@ fi
 
 # Check MTU packet size
 
-ip link show | grep ' eth1:' | grep ' mtu 9000 ' > /dev/null
+ip link show dev eth1 | grep ' mtu 9000 ' > /dev/null
 if [ $? -ne 0 ]; then
-  echo "$PROG: warning: eth1 MTU size is not set to 9000 bytes" >&2
+  echo "$PROG: warning: DHCP did not set eth1 MTU to 9000 bytes" >&2
 fi
 
 #----------------------------------------------------------------
