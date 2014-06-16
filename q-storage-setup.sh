@@ -651,7 +651,7 @@ check_ok
 
 # Create direct map file
 
-DMAP=/etc/auto.qcloud
+DMAP=/etc/auto.qriscloud
 
 if [ -n "$VERBOSE" ]; then
   echo "$PROG: creating direct map file for autofs: $DMAP"

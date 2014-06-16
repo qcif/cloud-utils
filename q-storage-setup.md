@@ -161,7 +161,7 @@ installed from the NeCTAR official images):
 Files
 -----
 
-- `/etc/auto.qcloud` - direct map file created with mount information.
+- `/etc/auto.qriscloud` - direct map file created with mount information.
 - `/etc/auto.master` - configuration file for _autofs_.
 
 Diagnosis
@@ -248,7 +248,7 @@ This script cannot remove all the mounts it creates. While it can
 change the mounts to a new set of one or more storage allocation
 names, that new set cannot be empty.  Removing all mounts can be done
 manually: editing the _/etc/auto.master_ file, optionally deleting the
-_/etc/auto.qcloud_ file, and restarting _autofs_ (by running `service
+_/etc/auto.qriscloud_ file, and restarting _autofs_ (by running `service
 autofs restart`).
 
 Contact
