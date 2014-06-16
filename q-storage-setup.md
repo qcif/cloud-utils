@@ -156,7 +156,7 @@ installed from the NeCTAR official images):
 - Scientific Linux 6.4 64-bit
 - Ubuntu 12.10 64-bit
 - Ubuntu 13.04 64-bit
-- Ubuntu 14.04 (Trusty) amd64 (see _diagnosis_ for addition setup)
+- Ubuntu 14.04 (Trusty) amd64
 
 Files
 -----
@@ -204,6 +204,13 @@ running in QRIScloud. The automatic detection probably failed because
 the VM instance is not running in QRIScloud at all, in which case NFS
 mounting cannot work (even if a stage is explicitly specified).
 
+### Package '...' has no installation candidate
+
+The _apt-get_ package manager has not been properly configured.
+Update it:
+
+    sudo apt-get update
+
 ### Cannot ping NFS server
 
 Check the second network interface (usually eth1) on the virtual
@@ -212,37 +219,13 @@ IP address.
 
     ip -f inet addr
 
-If it does not have an IP address, either run the DHCP client:
+If it does not have an IP address, check the network interface
+configuration files or run the DHCP client:
 
     sudo dhclient eth1
 
-Or for a more permanent solution, edit the network configuration to
-ensure the DHCP client is used on startup.
-
-### stop: Job failed while stopping ... start: Job is already running: networking
-
-The second network interface is not setup. See "Cannot ping NFS
-server" above.
-
-### Package '...' has no installation candidate
-
-The _apt-get_ package manager has not been properly configured.
-Update it:
-
-    sudo apt-get update
-
-### NeCTAR Ubuntu 14.04 (Trusty) amd64
-
-The "NeCTAR Ubuntu 14.04 (Trusty) amd64" NeCTAR official image
-(updated 2014-06-09 11:09:01) requires additional setup before this
-script can be used:
-
-1. The second network interface needs to be activated and assigned
-   an IP address. See "Cannot ping NFS server" above.
-
-2. The _apt-get_ package manager needs to be initialized.
-   See "Package '...' has no installation candidate" above.
-
+This script should have automatically set up the second network
+interface, but obviously that failed: please report this as a bug.
 
 See also
 --------

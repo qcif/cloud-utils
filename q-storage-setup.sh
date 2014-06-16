@@ -384,10 +384,15 @@ pre-up /sbin/ifconfig eth1 mtu 9000
 EOF
     check_ok
 
-    # Caution: the following is not correct, since it will restart
-    # eth0 too and the user is most likely ssh-ing in to run this script!
-    service networking restart
-    check_ok
+    if [ -n "$VERBOSE" ]; then
+      echo "$PROG: ifup eth1"
+      ifup eth1
+      check_ok
+    else
+      ifup eth1 >/dev/null 2>&1
+      check_ok
+    fi
+
   fi 
 
 else
