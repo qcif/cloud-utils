@@ -8,7 +8,7 @@ Synopsis
 
     q-storage-setup.sh
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
-        [ -d | --dir dirname] [ -f | --force flavour]
+        [ -d | --dir dirname] [ -f | --force pkg]
         [ -s | --stage name]
         [ -v | --verbose ] [ -h | --help ] storageID {storageID...}
 
@@ -36,14 +36,15 @@ is used if this option is not specified. For autofs mode, the default
 of `/data` is used if this option is not specified.
 
 
-- `-f | --force flavour` forces use of commands for a given flavour of
-operating system.  This script has been tested with particular
-versions of _Red Hat Enterprise Linux_ or _Ubuntu_ based Linux
-distributions. It attempts to automatically detects if it is running
-on a tested Linux distribution. If the automatic detection fails or
-you want to take the risk of running it on an untested distribution,
-force it to use the commands for a particular distribution by using
-this option with `RHEL` or `ubuntu` as the argument.
+- `-f | --force pkg` forces use of commands for the given package
+manager type. This script has been tested with particular Linux
+distributions that use the "yum" package manager (e.g. CentOS and
+Fedora) and "apt" (e.g. Ubuntu and Debian). It attempts to
+automatically detect if it is running on a tested Linux
+distribution. If the automatic detection fails and/or you want to take
+the risk of running it on an untested distribution, force it to use
+the commands for a particular package manager by using this option
+with `yum` or `apt` as the argument.
 
 - `-s | --stage facility` sets the facility being used. The
 facility must either be "stage1" or "stage2". This option is normally
@@ -143,7 +144,8 @@ Environment
 This script must be run with root privileges.
 
 You might want to update existing packages before running this
-script. In RHEL, run "yum update". In Ubuntu, run "apt-get update".
+script. On YUM-based distributions, run "yum update". On APT-based
+distributions, run "apt-get update".
 
 Supported distributions
 -----------------------
@@ -181,7 +183,12 @@ not running on the Queensland node.
 
 ### Cannot access /data/Q...: no such file or directory
 
-See "mount.nfs: access denied by server while mounting" below.
+Encountered when trying to access the autofs mounted directory.
+
+Try ad hoc mounting the storage (i.e. without using autofs), and see
+what error message appears:
+
+    ./q-storage-setup.sh --mount Q...
 
 ### mount.nfs: access denied by server while mounting...
 
@@ -200,7 +207,7 @@ If the VM instance was instantiated less than 5 minutes ago, the
 permissions might not have been applied to it. Wait less than 5
 minutes and try again.
 
-### Package '...' has no installation candidate
+### Package 'nfs-common' has no installation candidate
 
 The _apt-get_ package manager has not been properly configured.
 Update it:
@@ -214,7 +221,7 @@ This error occurs on the Fedora images.
 Just re-run the script a second time, with the same parameters, and it
 should work.
 
-### warning: DHCP did not set eth1 MTU to 9000 bytes
+### DHCP did not set eth1 MTU to 9000 bytes
 
 The network interface did not set the MTU size from the information
 provided by the DHCP server. This occurs on the Fedora images.
@@ -253,7 +260,8 @@ mounting cannot work (even if a stage is explicitly specified).
 See also
 --------
 
-QCIF knowledge base article on _NFS mounting collection storage for Linux_.
+QCIF knowledge base article on [NFS mounting collection storage for
+Linux](https://qriscloud.zendesk.com/hc/en-us/articles/200106199-NFS-mounting-collection-storage-in-Linux).
 
 Bugs
 ----
@@ -273,6 +281,10 @@ names, that new set cannot be empty.  Removing all mounts can be done
 manually: editing the _/etc/auto.master_ file, optionally deleting the
 _/etc/auto.qriscloud_ file, and restarting _autofs_ (by running `service
 autofs restart`).
+
+Ad hoc mounts are created by default under _/mnt_, which is the
+ephemeral disk on NeCTAR VM instances. Use the `--dir` option to
+specify a different location.
 
 Contact
 -------

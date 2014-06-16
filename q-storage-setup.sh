@@ -29,8 +29,8 @@ NFS_PATH_STAGE1=/collection
 NFS_PATH_STAGE2=/tier2a
 
 MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
-MOUNT_OPTIONS_RHEL=nolock
-MOUNT_OPTIONS_UBUNTU=
+MOUNT_OPTIONS_YUM=nolock
+MOUNT_OPTIONS_APT=
 
 MOUNT_AUTOFS_EXTRA=bg
 
@@ -82,12 +82,12 @@ if [ -n "$HELP" ]; then
   echo "  -m | --mount      perform ad hoc mount mode"
   echo "  -u | --umount     perform ad hoc unmount mode"
   echo
-  echo "  -s | --stage name which NFS server to connect to (stage1 or stage2)"
-  echo
   echo "  -d | --dir name   directory containing mount points"
   echo "                    default for autofs: $DEFAULT_AUTO_MOUNT_DIR"
   echo "                    default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR"
-  echo "  -f | --force flv  set target distribution of OS (RHEL or ubuntu)"
+  echo "  -f | --force pkg  set package manager type (\"yum\" or \"apt\")"
+  echo "  -s | --stage name which NFS server to use (\"stage1\" or \"stage2\")"
+  echo
   echo "  -v | --verbose    show extra information"
   echo "  -h | --help       show this message"
   exit 0
@@ -272,7 +272,7 @@ if [ -z "$FORCE" ]; then
        "$ASCIID" = 'Fedora release 19 (SchrXXdingerXXXs Cat)X' -o \
        "$DISTRO" = 'Fedora release 20 (Heisenbug)' \
      ]; then
-    FLAVOUR=RHEL
+    FLAVOUR=yum
   elif [ "$DISTRO" = 'Ubuntu 12.10' -o \
          "$DISTRO" = 'Ubuntu 13.04' -o \
          "$DISTRO" = 'Ubuntu 13.10' -o \
@@ -280,15 +280,15 @@ if [ -z "$FORCE" ]; then
          "$DISTRO" = 'Debian GNU/Linux 6.0.8 (squeeze)' -o \
          "$DISTRO" = 'Debian GNU/Linux 7.4 (wheezy)' \
       ]; then
-    FLAVOUR=ubuntu
+    FLAVOUR=apt
   else
-    echo "$PROG: error: unsupported distribution: $DISTRO (use --force RHEL|ubuntu)"
+    echo "$PROG: error: unsupported distribution: $DISTRO (use --force yum|apt)"
     exit 1
   fi
 else
   FLAVOUR="$FORCE"
-  if [ "$FLAVOUR" != 'RHEL' -a "$FLAVOUR" != 'ubuntu' ]; then
-    echo "$PROG: error: unsupported flavour (expecting \"RHEL\" or \"ubuntu\"): $FLAVOUR" >&2
+  if [ "$FLAVOUR" != 'yum' -a "$FLAVOUR" != 'apt' ]; then
+    echo "$PROG: error: unsupported flavour (expecting \"yum\" or \"apt\"): $FLAVOUR" >&2
     exit 2
   fi
 fi
@@ -300,10 +300,10 @@ fi
 
 #----------------------------------------------------------------
 
-if [ $FLAVOUR = 'RHEL' ]; then
-  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_RHEL"
-elif [ $FLAVOUR = 'ubuntu' ]; then
-  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_UBUNTU"
+if [ $FLAVOUR = 'yum' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_YUM"
+elif [ $FLAVOUR = 'apt' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_APT"
 else
   echo "$PROG: internal error: unknown flavour: $FLAVOUR" >&2
   exit 3
@@ -336,7 +336,7 @@ fi
 #----------------------------------------------------------------
 # Configure private network interface
 
-if [ "$FLAVOUR" = 'RHEL' ]; then
+if [ "$FLAVOUR" = 'yum' ]; then
 
   ETH1_CFG=/etc/sysconfig/network-scripts/ifcfg-eth1
 
@@ -375,7 +375,7 @@ EOF
     I_CONFIGURED_ETH1=yes
   fi
 
-elif [ "$FLAVOUR" = 'ubuntu' ]; then
+elif [ "$FLAVOUR" = 'apt' ]; then
 
   IF_FILE=/etc/network/interfaces
   if [ ! -f "$IF_FILE" ]; then
@@ -436,7 +436,7 @@ fi
 #----------------------------------------------------------------
 # Install NFS client
 
-if [ "$FLAVOUR" = 'RHEL' ]; then
+if [ "$FLAVOUR" = 'yum' ]; then
 
   # nfs-utils
   rpm -q nfs-utils > /dev/null
@@ -447,7 +447,7 @@ if [ "$FLAVOUR" = 'RHEL' ]; then
     check_ok 
   fi
 
-elif [ "$FLAVOUR" = 'ubuntu' ]; then
+elif [ "$FLAVOUR" = 'apt' ]; then
 
   # nfs-common
   if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-qq"; fi
@@ -502,7 +502,7 @@ fi
 #----------------------------------------------------------------
 # Create group and users (needed for both ad hoc mounting and autofs)
 
-if [ "$FLAVOUR" = 'RHEL' ]; then
+if [ "$FLAVOUR" = 'yum' ]; then
 
   grep "^[^:]*:[^:]*:48:" /etc/group > /dev/null
   if [ $? -ne 0 ]; then
@@ -533,7 +533,7 @@ if [ "$FLAVOUR" = 'RHEL' ]; then
     fi
   done
 
-elif [ "$FLAVOUR" = 'ubuntu' ]; then
+elif [ "$FLAVOUR" = 'apt' ]; then
 
   grep "^[^:]*:[^:]*:48:" /etc/group > /dev/null
   if [ $? -ne 0 ]; then
@@ -630,7 +630,7 @@ fi
 # yum -y $QUIET_FLAG update
 # apt-get update
 
-if [ "$FLAVOUR" = 'RHEL' ]; then
+if [ "$FLAVOUR" = 'yum' ]; then
 
   # Install autofs
 
@@ -642,7 +642,7 @@ if [ "$FLAVOUR" = 'RHEL' ]; then
     check_ok
   fi
 
-elif [ "$FLAVOUR" = 'ubuntu' ]; then
+elif [ "$FLAVOUR" = 'apt' ]; then
 
   # TODO: check if already installed?
 
