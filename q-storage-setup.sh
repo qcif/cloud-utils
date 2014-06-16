@@ -264,15 +264,22 @@ if [ -z "$FORCE" ]; then
   else
     DISTRO=unknown
   fi
+  ASCIID=`echo "$DISTRO" | tr -c ' -~' 'X'`
   if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
        "$DISTRO" = 'CentOS release 6.5 (Final)' -o \
        "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' -o \
-       "$DISTRO" = 'Scientific Linux release 6.5 (Carbon)' ]; then
+       "$DISTRO" = 'Scientific Linux release 6.5 (Carbon)' -o \
+       "$ASCIID" = 'Fedora release 19 (SchrXXdingerXXXs Cat)X' -o \
+       "$DISTRO" = 'Fedora release 20 (Heisenbug)' \
+     ]; then
     FLAVOUR=RHEL
   elif [ "$DISTRO" = 'Ubuntu 12.10' -o \
          "$DISTRO" = 'Ubuntu 13.04' -o \
          "$DISTRO" = 'Ubuntu 13.10' -o \
-         "$DISTRO" = 'Ubuntu 14.04 LTS' ]; then
+         "$DISTRO" = 'Ubuntu 14.04 LTS' -o \
+         "$DISTRO" = 'Debian GNU/Linux 6.0.8 (squeeze)' -o \
+         "$DISTRO" = 'Debian GNU/Linux 7.4 (wheezy)' \
+      ]; then
     FLAVOUR=ubuntu
   else
     echo "$PROG: error: unsupported distribution: $DISTRO (use --force RHEL|ubuntu)"
@@ -344,6 +351,11 @@ BOOTPROTO="dhcp"
 #NM_CONTROLLED="yes"
 ONBOOT="yes"
 TYPE="Ethernet"
+#
+## MTU size is provided by DHCP. If not, uncomment the following lines.
+#
+# MTU="9000"
+# IPV6_MTU="9000"
 EOF
 
     # Bring up the network interface
@@ -379,6 +391,9 @@ elif [ "$FLAVOUR" = 'ubuntu' ]; then
 # The secondary network interface (connects to QRIScloud internal network)
 auto eth1
 iface eth1 inet dhcp
+
+## MTU size is provided by DHCP. If not, uncomment the following line.
+# pre-up /sbin/ifconfig eth1 mtu 9000
 
 EOF
     check_ok

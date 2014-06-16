@@ -151,12 +151,17 @@ Supported distributions
 This script has been tested on the following distributions (as
 installed from the NeCTAR official images):
 
-- CentOS 6.4 64-bit
-- CentOS 6.5 64-bit
-- Scientific Linux 6.4 64-bit
-- Ubuntu 12.10 64-bit
-- Ubuntu 13.04 64-bit
+- CentOS 6.4 x86_64
+- CentOS 6.5 x86_64
+- Fedora 19 x86_64
+- Fedora 20 x86_64
+- Scientific Linux 6.4 x86_64
+- Scientific Linux 6.5 x86_64
+- Ubuntu 12.10 (Quantal) amd64
+- Ubuntu 13.10 (Saucy) amd64
 - Ubuntu 14.04 (Trusty) amd64
+- Debian 6 x86_64 (Squeeze)
+- Debian 7 x86_64 (Wheezy)
 
 Files
 -----
@@ -174,14 +179,11 @@ machine instances running in QRIScloud (i.e. either on the stage 1
 "qld" or stage 2 "QRIScloud" availability zone). The current system is
 not running on the Queensland node.
 
-### dhclient(...) is already running - exiting
-
-This error has been seen on Fedora 18.
-
-Just re-run the script a second time, with the same parameters, and it
-will work.
-
 ### Cannot access /data/Q...: no such file or directory
+
+See "mount.nfs: access denied by server while mounting" below.
+
+### mount.nfs: access denied by server while mounting...
 
 The most common cause is the virtual machine instance has not been
 given permission to mount that particular storage allocation. Please
@@ -194,15 +196,9 @@ Alternatively add `OPTIONS="--debug"` to the _/etc/sysconfig/autofs_
 file, restart _autofs_ (`sudo service autofs restart`), attempt to
 access the mounted directory and then examine _/var/log/messages_.
 
-### Cannot determine stage
-
-The automatic detection of whether the VM instance is running in
-QRIScloud stage 1 or QRIScloud stage 2 failed.
-
-Before explicitly specifying a stage, check that the VM instance is
-running in QRIScloud. The automatic detection probably failed because
-the VM instance is not running in QRIScloud at all, in which case NFS
-mounting cannot work (even if a stage is explicitly specified).
+If the VM instance was instantiated less than 5 minutes ago, the
+permissions might not have been applied to it. Wait less than 5
+minutes and try again.
 
 ### Package '...' has no installation candidate
 
@@ -210,6 +206,23 @@ The _apt-get_ package manager has not been properly configured.
 Update it:
 
     sudo apt-get update
+
+### dhclient(...) is already running - exiting
+
+This error occurs on the Fedora images.
+
+Just re-run the script a second time, with the same parameters, and it
+should work.
+
+### warning: DHCP did not set eth1 MTU to 9000 bytes
+
+The network interface did not set the MTU size from the information
+provided by the DHCP server. This occurs on the Fedora images.
+
+Explicitly set it by editing the network interface configuration file
+(for RHEL systems, edit _/etc/sysconfig/network-scripts/ifcfg-eth1_;
+for ubuntu systems, edit _/etc/network/interfaces_) and restart the
+interface (`ifdown eth1; ifup eth1`).
 
 ### Cannot ping NFS server
 
@@ -226,6 +239,16 @@ configuration files or run the DHCP client:
 
 This script should have automatically set up the second network
 interface, but obviously that failed: please report this as a bug.
+
+### Cannot determine stage
+
+The automatic detection of whether the VM instance is running in
+QRIScloud stage 1 or QRIScloud stage 2 failed.
+
+Before explicitly specifying a stage, check that the VM instance is
+running in QRIScloud. The automatic detection probably failed because
+the VM instance is not running in QRIScloud at all, in which case NFS
+mounting cannot work (even if a stage is explicitly specified).
 
 See also
 --------
