@@ -24,7 +24,11 @@
 
 PROG=`basename $0`
 
-RAMSIZE=4096
+RAM_SIZE=2048
+DRIVE_SIZE=20G
+DISK_INTERFACE=scsi
+VNC_DISPLAY=0
+
 PARTITION_MOUNT_POINT=/mnt/diskimage
 DEFAULT_DISK_LABEL=bootdisk
 DEFAULT_IMAGE_NAME="Test `date "+%Y-%m-%d %H:%M%:z"`"
@@ -96,27 +100,53 @@ if [ -z "$CMD" ]; then
 fi
 
 #----------------------------------------------------------------
-# Check dependent programs are installed
+# Check support for virtualization
 
-MISSING_PACKAGES=
+function check_virt_support () {
 
-if ! which kvm-img >/dev/null || ! which qemu-system-x86_64 >/dev/null; then
-  MISSING_PACKAGES="$MISSING_PACKAGES qemu-kvm cloud-utils"
-fi
+  # Check for executable
 
-if ! which glance >/dev/null; then
-  MISSING_PACKAGES="$MISSING_PACKAGES glance"
-fi
+  if ! which qemu-img >/dev/null >/dev/null; then
+    echo "$PROG: error: program not found: qemu-img" >&2
+  fi
 
-if ! which expect >/dev/null; then
-  MISSING_PACKAGES="$MISSING_PACKAGES expect"
-fi
+  # Determine virtualization executable
 
-if [ -n "$MISSING_PACKAGES" ]; then
-  echo "$PROG: dependencies missing. To install them, please run" >&2
-  echo "  apt-get install $MISSING_PACKAGES" >&2
-  exit 3
-fi
+  QEMU_EXEC_1=/usr/libexec/qemu-kvm  # CentOS (not in PATH)
+  QEMU_EXEC_2=qemu-system-x86_64  # Ubuntu
+
+  if which $QEMU_EXEC_1 >/dev/null 2>&1; then
+    QEMU_EXEC="$QEMU_EXEC_1"
+
+  elif which $QEMU_EXEC_2 >/dev/null 2>&1; then
+    QEMU_EXEC="$QEMU_EXEC_2"
+
+  else
+    echo "$PROG: error: program not found: $QEMU_EXEC_1 or $QEMU_EXEC_2" >&2
+    echo "$PROG: error: check if the \"qemu-kvm\" package has been installed" >&2
+    exit 3
+  fi
+
+  # Check if virtualization extensions are being used
+
+  VIRT_SUPPORT=yes
+
+  egrep "(vmx|svm)" /proc/cpuinfo >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    # No Intel VT-x or AMD AMD-V extensions
+    echo "$PROG: warning: CPU has no virtualization extension support" >&2
+    VIRT_SUPPORT=
+  else
+    if [ ! -c '/dev/kvm' ]; then
+      echo "$PROG: warning: KVM not installed and/or supported by kernel" >&2
+      VIRT_SUPPORT=
+    fi
+  fi
+
+  if [ -z "$VIRT_SUPPORT" ]; then
+    echo "$PROG: warning: using emulation: performance will be poor" >&2
+  fi
+}
 
 #----------------------------------------------------------------
 
@@ -141,39 +171,38 @@ if [ "$CMD" = 'install' ]; then
     exit 1
   fi
 
+  check_virt_support
+
   echo
   echo "Installation"
   echo "------------"
-  echo "1. Connect using VNC."
+  echo "1. Connect to VNC display $VNC_DISPLAY (no password required)"
   echo "2. Install on custom layout on entire disk (i.e. no swap partition)."
   echo "3. Type \"quit\" when installation is finished."
   echo
 
   # Create disk image
-  kvm-img create -f raw "$IMAGE" 10G
+  echo "Creating disk image file: "
+  /bin/echo -n "  "
+  qemu-img create -f raw "$IMAGE" $DRIVE_SIZE
   if [ $? -ne 0 ]; then
     echo "$PROG: error"
     exit 1
   fi
+  echo
+
+#TODO
+  # Windows 7 needs ACPI
+  #-no-acpi \
 
   # Run emmulator to install the OS
-  expect -c "
-set timeout 30;
-spawn qemu-system-x86_64 \
-  -m $RAMSIZE \
-  -drive \"file=$IMAGE,if=scsi,index=0\" \
-  -cdrom \"$ISO_FILE\" -boot order=d \
-  -net nic -net user -usbdevice tablet \
-  -no-acpi \
-  -vnc 127.0.0.1:0 \
-  -monitor stdio;
-expect \"(qemu)\";
-send \"change vnc password\r\";
-expect \"Password:\";
-send \"\r\";
-expect \"(qemu)\";
-interact;
-"
+  $QEMU_EXEC  \
+    -m $RAM_SIZE \
+    -drive "file=$IMAGE,if=$DISK_INTERFACE,index=0" \
+    -cdrom "$ISO_FILE" -boot order=cd,once=d \
+    -net nic -net user -usbdevice tablet \
+    -vnc 127.0.0.1:$VNC_DISPLAY \
+    -monitor stdio
   if [ $? -ne 0 ]; then
     echo "$PROG: error"
     exit 1
@@ -197,31 +226,24 @@ elif [ "$CMD" = 'run' ]; then
     exit 1
   fi
 
+  check_virt_support
+
   echo
   echo "Configuration"
   echo "-------------"
-  echo "1. Connect using VNC."
-  echo "2. Setup the operating system ready for imaging."
+  echo "1. Connect to VNC display $VNC_DISPLAY (no password required)"
+  echo "2. Configure the operating system ready for imaging."
   echo "3. Type \"quit\" when setup is finished."
   echo
 
   # Run emmulator to configure OS
-  expect -c "
-set timeout 30;
-spawn qemu-system-x86_64 \
-  -m $RAMSIZE \
-  -drive \"file=$IMAGE,if=scsi,index=0\" -boot order=c \
-  -net nic -net user -usbdevice tablet \
-  -no-acpi \
-  -vnc 127.0.0.1:0 \
-  -monitor stdio;
-expect \"(qemu)\";
-send \"change vnc password\r\";
-expect \"Password:\";
-send \"\r\";
-expect \"(qemu)\";
-interact;
-"
+  $QEMU_EXEC  \
+    -m $RAM_SIZE \
+    -drive "file=$IMAGE,if=$DISK_INTERFACE,index=0" -boot order=c \
+    -net nic -net user -usbdevice tablet \
+    -no-acpi \
+    -vnc 127.0.0.1:$VNC_DISPLAY \
+    -monitor stdio
   if [ $? -ne 0 ]; then
     echo "$PROG: error"
     exit 1
@@ -358,6 +380,13 @@ elif [ "$CMD" = "upload" ]; then
 
   if [ ! -f "$RC_FILE" ]; then
     echo "$PROG: error: missing RC file: $RC_FILE" >&2
+    exit 1
+  fi
+
+  # Check for glance program
+
+  if ! which glance >/dev/null; then
+    echo "$PROG: error: program not found: glance" >&2
     exit 1
   fi
 

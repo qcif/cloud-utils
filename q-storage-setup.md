@@ -204,8 +204,8 @@ file, restart _autofs_ (`sudo service autofs restart`), attempt to
 access the mounted directory and then examine _/var/log/messages_.
 
 If the VM instance was instantiated less than 5 minutes ago, the
-permissions might not have been applied to it. Wait less than 5
-minutes and try again.
+permissions might not have been applied to it. Wait up to 5 minutes
+and try again.
 
 ### Package 'nfs-common' has no installation candidate
 

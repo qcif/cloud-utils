@@ -9,10 +9,27 @@ Synopsis
 --------
 
     q-image-create.sh
+
 	
 Description
 -----------
 
+
+
+Requirements
+------------
+
+Creation system requires KVM.
+
+On systems using YUM:
+
+    sudo yum install qemu-kvm
+    yum install python-glanceclient
+
+On systems using apt-get:
+
+    apt-get install qemu-kvm cloud-utils
+    apt-get install glance
 
 
 Examples
@@ -64,25 +81,40 @@ a command.
 
     $ ./q-image-create.sh --install Fedora-19-x86_64-DVD.iso disk.img
 
-Connect to the VNC server (through the ssh tunnel). If the local
-machine is a Macintosh, a VNC client can be started by running (in a
-different shell; not in the qemu console):
+Connect to the VNC server (i.e. to port 6900 of the local machine).
 
-    localhost$ open vnc://localhost:6900
+Warning: If the local machine is a Macintosh do not use the _Screen
+Sharing_ client that comes with OS X, because it is incompatible with
+the VNC implementation provided by QEMU/KVM: use a third party VNC
+client.
 
-The VNC password is empty, just press return when prompted for it.
+The VNC password is empty, just press return when prompted for it. If
+you are paranoid about security, the VNC password can be set by
+entering the command "change vnc password".
 
 Install the operating system normally, using the entire 10GiB drive
 for one partition that mounts on "/".  Select "custom disk
-partitioning" or similar option to do this, because the default
-automatic partition will create an unwanted swap partition.  Ignore
-any warnings about not having a swap partition.
+partitioning", "Review and modify partitioning layout" or a similar
+option to do this: the default automatic partition will usually create
+an unwanted swap partition.  Ignore any warnings about not having a
+swap partition.
 
 When the installation has finished (i.e. after shutting down the guest
 virtual machine), close the VNC client then stop the guest virtual
 machine by typing "quit" into the qemu console.
 
     (qemu) quit
+
+Other useful commands:
+
+- system_reset - reboot the virtual machine
+- boot_set - set boot device (e.g. "c" for first hard disk, "d" for CDROM)
+- info vnc - show VNC client and server details
+- (tab key) - brief list of commands
+
+- info block
+- change ide1-cd0 ....iso
+- eject ide1-cd0
 
 ### Phase 2: run from drive to configure
 
