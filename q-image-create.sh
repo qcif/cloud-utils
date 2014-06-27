@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Utility to help in the creation of virtual machine images.
 #
@@ -18,22 +18,14 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-# Note: script explicitly uses "bash" instead of "sh" so that the
-# "source" command is available and handles the "read -s" in the RC
-# file.
+PROG=`basename $0 .sh`
 
-PROG=`basename $0`
-
-RAM_SIZE=2048
-DRIVE_SIZE=20G
-DISK_INTERFACE=scsi
-VNC_DISPLAY=0
+DEFAULT_TARGET_TYPE=linux
+DEFAULT_VNC_DISPLAY=0
 
 PARTITION_MOUNT_POINT=/mnt/diskimage
 DEFAULT_DISK_LABEL=bootdisk
-DEFAULT_IMAGE_NAME="Test `date "+%Y-%m-%d %H:%M%:z"`"
-
-RC_FILE="Mars-openrc.sh"
+DEFAULT_IMAGE_NAME="Test image `date "+%F %T%:z"`"
 
 #----------------------------------------------------------------
 
@@ -45,13 +37,15 @@ die () {
 #----------------------------------------------------------------
 # Process command line
 
+SHORT_OPTS="d:iremn:t:uUhvx:"
+
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long install,run,extract,mount,unmount,upload,help,verbose --options iremuUhv -- "$@"`
+  ARGS=`getopt --name "$PROG" --long install,run,extract,mount,unmount,upload,target:,display:,extra-options:,name:,help,verbose --options $SHORT_OPTS -- "$@"`
 else
   # Original getopt is available (no long option names, no whitespace, no sorting)
-  ARGS=`getopt iremuUhv "$@"`
+  ARGS=`getopt $SHORT_OPTS "$@"`
 fi
 if [ $? -ne 0 ]; then
   echo "$PROG: usage error (use -h for help)" >&2
@@ -60,6 +54,11 @@ fi
 eval set -- $ARGS
 
 CMD=
+VNC_DISPLAY=$DEFAULT_VNC_DISPLAY
+TARGET_TYPE=$DEFAULT_TARGET_TYPE
+
+# EXTRA_QEMU_OPTIONS="-drive file=dummydisk.img,if=virtio"
+EXTRA_QEMU_OPTIONS=
 DISK_LABEL="$DEFAULT_DISK_LABEL"
 IMAGE_NAME="$DEFAULT_IMAGE_NAME"
 
@@ -71,8 +70,13 @@ while [ $# -gt 0 ]; do
 	-m | --mount)    CMD=mount;;
 	-u | --unmount)  CMD=unmount;;
 	-U | --upload)   CMD=upload;;
+
+        -t | --target)   TARGET_TYPE="$2"; shift;;
+        -d | --display)  VNC_DISPLAY="$2"; shift;;
+        -x | --extra)    EXTRA_QEMU_OPTIONS="$2"; shift;;
+        -n | --name)     IMAGE_NAME="$2"; shift;;
+
         -h | --help)     HELP=yes;;
-        #-o | --output)   OUT_FILE="$2"; shift;;
         -v | --verbose)  VERBOSE=yes;;
         --)              shift; break;; # end of options
     esac
@@ -89,6 +93,10 @@ if [ -n "$HELP" ]; then
   echo "  --umount  partition.img"
   echo "  --upload  partition.img"
   echo "Options:"
+  echo "  --target type     settings for install/run (linux, win-ide, win-virtio)"
+  echo "  --display num     VNC display number (default: $DEFAULT_VNC_DISPLAY)"
+  echo "  --extra-opts str  extra options to pass to QEMU for install/run"
+  echo "  --name imageName  name for upload"
   echo "  --help"
   echo "  --verbose"
   exit 0
@@ -102,11 +110,12 @@ fi
 #----------------------------------------------------------------
 # Check support for virtualization
 
-function check_virt_support () {
+function run_vm () {
+  MODE=$1
 
   # Check for executable
 
-  if ! which qemu-img >/dev/null >/dev/null; then
+  if ! which qemu-img >/dev/null 2>&1; then
     echo "$PROG: error: program not found: qemu-img" >&2
   fi
 
@@ -146,6 +155,89 @@ function check_virt_support () {
   if [ -z "$VIRT_SUPPORT" ]; then
     echo "$PROG: warning: using emulation: performance will be poor" >&2
   fi
+
+  # Set target-based options
+
+  if [ "$TARGET_TYPE" = 'linux' ]; then
+    # Assume Linux distributions can support VirtIO disks out-of-the-box.
+
+    DISK_INTERFACE=virtio
+    RAM_SIZE=2048
+    # -no-acpi (Windows needs ACPI)
+
+  elif [ "$TARGET_TYPE" = 'win-ide' ]; then
+    # Windows does not support VirtIO without special drivers, so use IDE
+    DISK_INTERFACE=ide
+    RAM_SIZE=4096
+
+  elif [ "$TARGET_TYPE" = 'win-virtio' ]; then
+    # For use after VirtIO drivers have been installed
+    DISK_INTERFACE=virtio
+    RAM_SIZE=4096
+
+  else
+    echo "$PROG: unsupported target type: $TARGET_TYPE (QEMU options)" >&2
+    exit 1
+  fi
+
+  QEMU_OPTIONS="-m $RAM_SIZE -smp 4 -net nic -net user -usbdevice tablet"
+
+  # Additional mode-based options
+
+  if [ "$MODE" = 'Installation' ]; then
+    CDROM_OPTIONS="-cdrom $ISO_FILE -boot order=cd,once=d"
+
+    STEP_2="Install on custom layout on entire disk (i.e. no swap partition)."
+    STEP_NEXT="Next step: --run diskImage"
+
+  elif [ "$MODE" = 'Configuration' ]; then
+    CDROM_OPTIONS="-boot order=c"
+
+    STEP_2="Configure the operating system ready for imaging."
+    STEP_NEXT="Next step: --run diskImage (again) OR --extract diskImage partition"
+
+  else
+    echo "$PROG: internal error: unknown mode: $MODE" >&2
+    exit 1
+  fi
+
+  # Run QEMU
+
+  COMMAND="$QEMU_EXEC $QEMU_OPTIONS \
+    -drive file=$IMAGE,if=$DISK_INTERFACE,index=0 \
+    $CDROM_OPTIONS \
+    $EXTRA_QEMU_OPTIONS \
+    -vnc 127.0.0.1:$VNC_DISPLAY"
+
+  if [ -n "$VERBOSE" ]; then
+    echo $COMMAND
+    echo
+  fi
+
+  # -monitor stdio
+
+  # Run QEMU in background (nohup so user can log out without stopping it)
+
+  LOGFILE="q-image-create-$$.log"
+  nohup $COMMAND > $LOGFILE 2>&1 &
+  QEMU_PID=$!
+  sleep 2
+  if ! ps $QEMU_PID > /dev/null; then
+    cat $LOGFILE
+    rm $LOGFILE
+    echo "$PROG: QEMU returned an error" 2>&1
+    exit 1
+  fi
+  echo "$PROG: `date "+%F %T%:z"`: QEMU PID: $QEMU_PID" >> $LOGFILE
+
+  echo "$MODE"
+  echo "------------"
+  echo "1. Connect to VNC display $VNC_DISPLAY (no password required)"
+  echo "   QEMU monitor: type Ctrl-Alt-2 into VNC"
+  echo "   Log file: $LOGFILE"
+  echo "   PID: $QEMU_PID"
+  echo "2. $STEP_2"
+  echo "3. $STEP_NEXT"
 }
 
 #----------------------------------------------------------------
@@ -171,44 +263,35 @@ if [ "$CMD" = 'install' ]; then
     exit 1
   fi
 
-  check_virt_support
-
-  echo
-  echo "Installation"
-  echo "------------"
-  echo "1. Connect to VNC display $VNC_DISPLAY (no password required)"
-  echo "2. Install on custom layout on entire disk (i.e. no swap partition)."
-  echo "3. Type \"quit\" when installation is finished."
-  echo
-
   # Create disk image
-  echo "Creating disk image file: "
-  /bin/echo -n "  "
-  qemu-img create -f raw "$IMAGE" $DRIVE_SIZE
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error"
-    exit 1
-  fi
-  echo
 
-#TODO
-  # Windows 7 needs ACPI
-  #-no-acpi \
-
-  # Run emmulator to install the OS
-  $QEMU_EXEC  \
-    -m $RAM_SIZE \
-    -drive "file=$IMAGE,if=$DISK_INTERFACE,index=0" \
-    -cdrom "$ISO_FILE" -boot order=cd,once=d \
-    -net nic -net user -usbdevice tablet \
-    -vnc 127.0.0.1:$VNC_DISPLAY \
-    -monitor stdio
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error"
+  if [ "$TARGET_TYPE" = 'linux' ]; then
+    DRIVE_SIZE=10G # 10 GiB is the standard size for NeCTAR images
+  elif [ "$TARGET_TYPE" = 'win-ide' ]; then
+    DRIVE_SIZE=30G
+  elif [ "$TARGET_TYPE" = 'win-virtio' ]; then
+    DRIVE_SIZE=30G
+  else
+    echo "$PROG: unsupported target type: $TARGET_TYPE (disk size)" >&2
     exit 1
   fi
 
-  echo "Next step: --run diskImage"
+  QEMU_IMG_OUTPUT=`qemu-img create -f raw "$IMAGE" $DRIVE_SIZE`
+  if [ $? -ne 0 ]; then
+    echo "$QEMU_IMG_OUTPUT"
+    echo "$PROG: qemu-image could not create disk image: $IMAGE"
+    exit 1
+  fi
+
+  if [ -n "$VERBOSE" ]; then
+    echo "Creating disk image file: $QEMU_IMG_OUTPUT"
+    echo
+  fi
+
+  # Run virtualization
+
+  run_vm Installation
+
 
 elif [ "$CMD" = 'run' ]; then
   #----------------------------------------------------------------
@@ -226,30 +309,8 @@ elif [ "$CMD" = 'run' ]; then
     exit 1
   fi
 
-  check_virt_support
+  run_vm Configuration
 
-  echo
-  echo "Configuration"
-  echo "-------------"
-  echo "1. Connect to VNC display $VNC_DISPLAY (no password required)"
-  echo "2. Configure the operating system ready for imaging."
-  echo "3. Type \"quit\" when setup is finished."
-  echo
-
-  # Run emmulator to configure OS
-  $QEMU_EXEC  \
-    -m $RAM_SIZE \
-    -drive "file=$IMAGE,if=$DISK_INTERFACE,index=0" -boot order=c \
-    -net nic -net user -usbdevice tablet \
-    -no-acpi \
-    -vnc 127.0.0.1:$VNC_DISPLAY \
-    -monitor stdio
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error"
-    exit 1
-  fi
-
-  echo "Next step: --run diskImage (again) OR --extract diskImage partition"
 
 elif [ "$CMD" = 'extract' ]; then
   #----------------------------------------------------------------
@@ -278,17 +339,67 @@ elif [ "$CMD" = 'extract' ]; then
     exit 1
   fi
 
-  losetup -f "$IMAGE" || die
-  losetup -a || die
-  fdisk -l /dev/loop0 || die
-  losetup -d /dev/loop0 || die	# unmount
-   
-  losetup -f -o 1048576 "$IMAGE" || die
-  losetup -a || die
+  # Determine parameters from disk needed to extract partition
 
-  dd if=/dev/loop0 of="$PARTITION" || die
+  D_DEVICE=`losetup -f "$IMAGE" --show`
+  if [ $? -ne 0 ]; then
+    echo "$PROG: error: loopback mounting of disk failed" >&2
+    exit 1
+  fi
 
-  losetup -d /dev/loop0 || die	# unmount
+  if [ $(fdisk -l -u $D_DEVICE | grep ^/dev/ | wc -l) -ne 1 ]; then
+    fdisk -l -u $D_DEVICE # display partitions to user
+    sleep 1 # else disconnect fails because device is busy
+    losetup -d "$D_DEVICE"
+    echo
+    echo "$PROG: error: disk image contains multiple partitions" >&2
+    exit 1
+  fi
+
+  # fdisk:
+  #   -l = list partitions for device
+  #   -u = results in 512 byte sectors
+  # egrep: make sure Start sector is the expected value of 2048
+  #        must be 2048 to match the 1048576 (=2048 x 512) hardwired below
+
+  fdisk -l -u $D_DEVICE | egrep '^/dev/[^ ]+ +[^ ]+ +2048 +' > /dev/null
+  if [ $? -ne 0 ]; then
+    fdisk -l -u $D_DEVICE # display partitions to user
+    losetup -d "$D_DEVICE"
+    echo
+    echo "$PROG: error: partition does not start at expected offset" >&2
+    exit 1
+  fi
+
+  sleep 1 # else disconnect fails because device is busy
+  losetup -d "$D_DEVICE"  # disconnect loopback mounted disk
+  if [ $? -ne 0 ]; then
+    echo "$PROG: error: could not disconnect disk loopback device: $D_DEVICE" >&2
+    exit 1
+  fi
+
+  # Loopback mount the partition and extract it
+
+  P_DEVICE=$(losetup -o 1048576 -f "$IMAGE" --show)
+  if [ $? -ne 0 ]; then
+    echo "$PROG: error: loopback mounting of partition failed" >&2
+    exit 1
+  fi
+
+  dd if="$P_DEVICE" of="$PARTITION"
+  if [ $? -ne 0 ]; then
+    sleep 1 # else disconnect fails because device is busy
+    losetup -d "$P_DEVICE"
+    echo "$PROG: error: could not copy partition from $P_DEVICE" >&2
+    exit 1
+  fi
+
+  sleep 1 # else disconnect fails because device is busy
+  losetup -d "$P_DEVICE"  # disconnect loopback mounted partition
+  if [ $? -ne 0 ]; then
+    echo "$PROG: error: could not disconnect partition loopback device: $P_DEVICE" >&2
+    exit 1
+  fi
 
   echo "Next step: --mount partitionImage"
 
@@ -378,25 +489,17 @@ elif [ "$CMD" = "upload" ]; then
     exit 1
   fi
 
-  if [ ! -f "$RC_FILE" ]; then
-    echo "$PROG: error: missing RC file: $RC_FILE" >&2
-    exit 1
-  fi
-
   # Check for glance program
 
-  if ! which glance >/dev/null; then
+  if ! which glance >/dev/null 2>&1; then
     echo "$PROG: error: program not found: glance" >&2
     exit 1
   fi
 
   if [ -z "$OS_AUTH_URL" -o -z "$OS_TENANT_ID" -o -z "$OS_TENANT_NAME" -o \
        -z "$OS_USERNAME" -o -z "$OS_PASSWORD" ]; then
-    # source is a Bash command (this is a bash script, not just a sh script)
-    source `dirname "$RC_FILE"`/`basename "$RC_FILE"` || die
-    if [ -z "$OS_PASSWORD" ]; then
-      die
-    fi
+    echo "$PROG: error: environment variables not set, source OpenStack RC file" >&2
+    exit 1
   fi
 
   echo "Uploading to OpenStack"
