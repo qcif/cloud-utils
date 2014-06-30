@@ -207,28 +207,24 @@ function run_vm () {
 
   # Run QEMU in background (nohup so user can log out without stopping it)
 
-  LOGFILE="q-image-create-$$.log"
-  nohup $COMMAND > $LOGFILE 2>&1 &
+  LOGFILE="$(dirname "$IMAGE")/$(basename "$IMAGE" .img).log"
+
+  nohup $COMMAND >> $LOGFILE 2>&1 &
   QEMU_PID=$!
 
   # Detect early termination errors
   sleep 2
   if ! ps $QEMU_PID > /dev/null; then
-    cat $LOGFILE
-    rm $LOGFILE
-    echo "$PROG: QEMU returned an error" 2>&1
+    # QEMU process no longer running
+    echo "$PROG: QEMU error (log file: $LOGFILE)" 2>&1
     exit 1
   fi
-  echo "$PROG: `date "+%F %T%:z"`: QEMU PID: $QEMU_PID" >> $LOGFILE
+  echo "$PROG: $(date "+%F %T%:z"): QEMU PID: $QEMU_PID" >> $LOGFILE
 
-  echo "$MODE"
-  echo "------------"
-  echo "1. Connect to VNC display $VNC_DISPLAY (no password required)"
-  echo "   QEMU monitor: type Ctrl-Alt-2 into VNC"
-  echo "   Log file: $LOGFILE"
-  echo "   PID: $QEMU_PID"
-  echo "2. $STEP_2"
-  echo "3. $STEP_NEXT"
+  echo "$MODE:"
+  echo "  1. Connect to VNC display $VNC_DISPLAY (no password required)"
+  echo "  2. $STEP_2"
+  echo "  3. $STEP_NEXT"
 }
 
 #----------------------------------------------------------------
