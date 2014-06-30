@@ -24,8 +24,8 @@ DEFAULT_DISK_SIZE=10G
 DEFAULT_DISK_INTERFACE=virtio
 DEFAULT_VNC_DISPLAY=0
 
-DEFAULT_DISK_LABEL=bootdisk
-DEFAULT_IMAGE_NAME="Test image $(date "+%F %T%:z")"
+DEFAULT_VOLUME_LABEL=bootdisk
+DEFAULT_IMAGE_NAME_PREFIX='Test image'
 
 #----------------------------------------------------------------
 
@@ -37,12 +37,12 @@ die () {
 #----------------------------------------------------------------
 # Process command line
 
-SHORT_OPTS="d:iremn:s:t:uUhvx:"
+SHORT_OPTS="d:irel:ms:t:uUhvx:"
 
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long install,run,extract,mount,unmount,upload,type:,size:,display:,extra-opts:,name:,help,verbose --options $SHORT_OPTS -- "$@"`
+  ARGS=`getopt --name "$PROG" --long install,run,extract,mount,unmount,label,upload,type:,size:,display:,extra-opts:,help,verbose --options $SHORT_OPTS -- "$@"`
 else
   # Original getopt is available (no long option names, no whitespace, no sorting)
   ARGS=`getopt $SHORT_OPTS "$@"`
@@ -60,8 +60,6 @@ DISK_INTERFACE=$DEFAULT_DISK_INTERFACE
 
 # EXTRA_QEMU_OPTIONS="-drive file=dummydisk.img,if=virtio"
 EXTRA_QEMU_OPTIONS=
-DISK_LABEL="$DEFAULT_DISK_LABEL"
-IMAGE_NAME="$DEFAULT_IMAGE_NAME"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -70,13 +68,13 @@ while [ $# -gt 0 ]; do
 	-e | --extract)  CMD=extract;;
 	-m | --mount)    CMD=mount;;
 	-u | --unmount)  CMD=unmount;;
+	-l | --label)    CMD=label;;
 	-U | --upload)   CMD=upload;;
 
         -s | --size)     DISK_SIZE="$2"; shift;;
         -t | --type)     DISK_INTERFACE="$2"; shift;;
         -d | --display)  VNC_DISPLAY="$2"; shift;;
         -x | --extra)    EXTRA_QEMU_OPTIONS="$2"; shift;;
-        -n | --name)     IMAGE_NAME="$2"; shift;;
 
         -h | --help)     HELP=yes;;
         -v | --verbose)  VERBOSE=yes;;
@@ -93,15 +91,17 @@ if [ -n "$HELP" ]; then
   echo "  --extract disk.img partition.img"
   echo "  --mount   partition.img mountPoint"
   echo "  --umount  partition.img mountPoint"
-  echo "  --upload  partition.img"
-  echo "Options:"
+  echo "  --label   partition.img [volumeLabel] (default: $DEFAULT_VOLUME_LABEL)"
+  echo "  --upload  partition.img [imageName] (default: $DEFAULT_IMAGE_NAME_PREFIX ...)"
+  echo "Options for use with install:"
   echo "  --size numBytes   disk size for install (default: $DEFAULT_DISK_SIZE)"
-  echo "  --type diskType   settings for install/run (default: $DEFAULT_DISK_INTERFACE)"
+  echo "Options for use with install or run:"
   echo "  --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)"
+  echo "  --type diskType   settings for install/run (default: $DEFAULT_DISK_INTERFACE)"
   echo "  --extra-opts str  extra options to pass to QEMU for install/run"
-  echo "  --name imageName  name for upload"
-  echo "  --help"
-  echo "  --verbose"
+  echo "Other options:"
+  echo "  --help            show this help message"
+  echo "  --verbose         show extra information"
   exit 0
 fi
 
@@ -410,6 +410,9 @@ elif [ "$CMD" = 'mount' ]; then
     fi
   else
     # Mount point does not exist: create it
+    if [ -n "$VERBOSE" ]; then
+      echo "Creating mount point directory: $MOUNT_POINT"
+    fi
     mkdir -p "$MOUNT_POINT" || die
   fi
 
@@ -446,16 +449,36 @@ elif [ "$CMD" = 'unmount' ]; then
     exit 1
   fi
 
-  if [ -z "$DISK_LABEL" ]; then
-    echo "$PROG: error: --partiton required to name partition" >&2
+  umount "$MOUNT_POINT" || die
+
+  echo "Next step: --label partitionImage label"
+
+elif [ "$CMD" = 'label' ]; then
+  #----------------------------------------------------------------
+  # Label
+
+  if [ $# -lt 1 ]; then
+    echo "$PROG: usage error: --label expects partitionImage and optional name" >&2
+    exit 2
+  elif [ $# -gt 2 ]; then
+    echo "$PROG: too many arguments (use -h for help)" >&2
     exit 2
   fi
-
-  umount "$MOUNT_POINT" || die
+  PARTITION="$1"
+  VOLUME_LABEL="$2"
+  if [ ! -f "$PARTITION" ]; then
+    echo "$PROG: error: file not found: $PARTITION" >&2
+    exit 1
+  fi
+  if [ -z "$VOLUME_LABEL" ]; then
+    VOLUME_LABEL="$DEFAULT_VOLUME_LABEL"
+    exit 1
+  fi
 
   # Change label of image to value in /etc/fstab
 
-  tune2fs -L "$DISK_LABEL" "$PARTITION" || die
+  echo "Setting volume label to \"$VOLUME_LABEL\""
+  tune2fs -L "$VOLUME_LABEL" "$PARTITION" || die
 
   echo "Next step: --upload partitionImage"
 
@@ -464,16 +487,20 @@ elif [ "$CMD" = "upload" ]; then
   # Upload
 
   if [ $# -lt 1 ]; then
-    echo "$PROG: usage error: --upload expects partitionImage" >&2
+    echo "$PROG: usage error: --upload expects partitionImage and optional image name" >&2
     exit 2
-  elif [ $# -gt 1 ]; then
+  elif [ $# -gt 2 ]; then
     echo "$PROG: too many arguments (use -h for help)" >&2
     exit 2
   fi
   PARTITION="$1"
+  IMAGE_NAME="$2"
   if [ ! -f "$PARTITION" ]; then
     echo "$PROG: error: file not found: $PARTITION" >&2
     exit 1
+  fi
+  if [ -z "$IMAGE_NAME" ]; then
+    IMAGE_NAME="$DEFAULT_IMAGE_NAME_PREFIX $(date "+%F %T%:z")"
   fi
 
   # Check for glance program
@@ -489,11 +516,13 @@ elif [ "$CMD" = "upload" ]; then
     exit 1
   fi
 
-  echo "Uploading to OpenStack"
-  echo "   Project: $OS_TENANT_NAME"
-  echo "      User: $OS_USERNAME"
-  echo "Image name: $IMAGE_NAME"
-  echo "Uploading..."
+  if [ -n "$VERBOSE" ]; then
+    echo "Uploading to OpenStack"
+    echo "   Project: $OS_TENANT_NAME"
+    echo "      User: $OS_USERNAME"
+    echo "Image name: $IMAGE_NAME"
+    echo "Uploading..."
+  fi
 
   glance image-create --name "$IMAGE_NAME" \
           --disk-format raw --container-format bare --is-public false \
@@ -505,7 +534,7 @@ else
   #----------------------------------------------------------------
   # Error
   echo "$PROG: error: unknown command: $CMD" >&2
-  exit 1
+  exit 3
 fi
 
 exit 0
