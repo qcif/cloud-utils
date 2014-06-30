@@ -24,7 +24,6 @@ DEFAULT_DISK_SIZE=10G
 DEFAULT_DISK_INTERFACE=virtio
 DEFAULT_VNC_DISPLAY=0
 
-PARTITION_MOUNT_POINT=/mnt/diskimage
 DEFAULT_DISK_LABEL=bootdisk
 DEFAULT_IMAGE_NAME="Test image $(date "+%F %T%:z")"
 
@@ -92,8 +91,8 @@ if [ -n "$HELP" ]; then
   echo "  --install disc.iso disk.img"
   echo "  --run     disk.img"
   echo "  --extract disk.img partition.img"
-  echo "  --mount   partition.img"
-  echo "  --umount  partition.img"
+  echo "  --mount   partition.img mountPoint"
+  echo "  --umount  partition.img mountPoint"
   echo "  --upload  partition.img"
   echo "Options:"
   echo "  --size numBytes   disk size for install (default: $DEFAULT_DISK_SIZE)"
@@ -377,7 +376,7 @@ elif [ "$CMD" = 'extract' ]; then
     exit 1
   fi
 
-  echo "Next step: --mount partitionImage"
+  echo "Next step: --mount partitionImage mountPoint"
 
 elif [ "$CMD" = 'mount' ]; then
   #----------------------------------------------------------------
@@ -388,30 +387,37 @@ elif [ "$CMD" = 'mount' ]; then
     exit 1
   fi
 
-  if [ $# -lt 1 ]; then
-    echo "$PROG: usage error: --run expects partitionImage" >&2
+  if [ $# -lt 2 ]; then
+    echo "$PROG: usage error: --mount expects partitionImage and mountPoint" >&2
     exit 2
-  elif [ $# -gt 1 ]; then
+  elif [ $# -gt 2 ]; then
     echo "$PROG: too many arguments (use -h for help)" >&2
     exit 2
   fi
   PARTITION="$1"
+  MOUNT_POINT="$2"
   if [ ! -f "$PARTITION" ]; then
     echo "$PROG: error: file not found: $PARTITION" >&2
     exit 1
   fi
 
-  if [ ! -d "$PARTITION_MOUNT_POINT" ]; then
-    echo "$PROG: error: partition mount point directory does not exist: $PARTITION_MOUNT_POINT" >&2
-    exit 1
+  if [ -e "$MOUNT_POINT" ]; then
+    # Mount point already exists: check if it is a directory
+
+    if [ ! -d "$MOUNT_POINT" ]; then
+      echo "$PROG: error: mount point is not a directory: $MOUNT_POINT" >&2
+      exit 1
+    fi
+  else
+    # Mount point does not exist: create it
+    mkdir -p "$MOUNT_POINT" || die
   fi
 
-  mkdir -p "$PARTITION_MOUNT_POINT" || die
-  mount -o loop "$PARTITION" "$PARTITION_MOUNT_POINT" || die
+  mount -o loop "$PARTITION" "$MOUNT_POINT" || die
 
   # Edit /etc/fstab and rc.local
 
-  echo "Next step: --unmount partitionImage"
+  echo "Next step: --unmount partitionImage mountPoint"
 
 elif [ "$CMD" = 'unmount' ]; then
   #----------------------------------------------------------------
@@ -422,16 +428,21 @@ elif [ "$CMD" = 'unmount' ]; then
     exit 1
   fi
 
-  if [ $# -lt 1 ]; then
-    echo "$PROG: usage error: --unmount expects partitionImage" >&2
+  if [ $# -lt 2 ]; then
+    echo "$PROG: usage error: --unmount expects partitionImage and mountPoint" >&2
     exit 2
-  elif [ $# -gt 1 ]; then
+  elif [ $# -gt 2 ]; then
     echo "$PROG: too many arguments (use -h for help)" >&2
     exit 2
   fi
   PARTITION="$1"
+  MOUNT_POINT="$2"
   if [ ! -f "$PARTITION" ]; then
     echo "$PROG: error: file not found: $PARTITION" >&2
+    exit 1
+  fi
+  if [ ! -d "$MOUNT_POINT" ]; then
+    echo "$PROG: error: mount point not found: $MOUNT_POINT" >&2
     exit 1
   fi
 
@@ -440,7 +451,7 @@ elif [ "$CMD" = 'unmount' ]; then
     exit 2
   fi
 
-  umount "$PARTITION_MOUNT_POINT" || die
+  umount "$MOUNT_POINT" || die
 
   # Change label of image to value in /etc/fstab
 
