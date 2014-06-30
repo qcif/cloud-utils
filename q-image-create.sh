@@ -20,12 +20,13 @@
 
 PROG=`basename $0 .sh`
 
-DEFAULT_TARGET_TYPE=linux
+DEFAULT_DISK_SIZE=10G
+DEFAULT_DISK_INTERFACE=virtio
 DEFAULT_VNC_DISPLAY=0
 
 PARTITION_MOUNT_POINT=/mnt/diskimage
 DEFAULT_DISK_LABEL=bootdisk
-DEFAULT_IMAGE_NAME="Test image `date "+%F %T%:z"`"
+DEFAULT_IMAGE_NAME="Test image $(date "+%F %T%:z")"
 
 #----------------------------------------------------------------
 
@@ -37,12 +38,12 @@ die () {
 #----------------------------------------------------------------
 # Process command line
 
-SHORT_OPTS="d:iremn:t:uUhvx:"
+SHORT_OPTS="d:iremn:s:t:uUhvx:"
 
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long install,run,extract,mount,unmount,upload,target:,display:,extra-options:,name:,help,verbose --options $SHORT_OPTS -- "$@"`
+  ARGS=`getopt --name "$PROG" --long install,run,extract,mount,unmount,upload,type:,size:,display:,extra-opts:,name:,help,verbose --options $SHORT_OPTS -- "$@"`
 else
   # Original getopt is available (no long option names, no whitespace, no sorting)
   ARGS=`getopt $SHORT_OPTS "$@"`
@@ -55,7 +56,8 @@ eval set -- $ARGS
 
 CMD=
 VNC_DISPLAY=$DEFAULT_VNC_DISPLAY
-TARGET_TYPE=$DEFAULT_TARGET_TYPE
+DISK_SIZE=$DEFAULT_DISK_SIZE
+DISK_INTERFACE=$DEFAULT_DISK_INTERFACE
 
 # EXTRA_QEMU_OPTIONS="-drive file=dummydisk.img,if=virtio"
 EXTRA_QEMU_OPTIONS=
@@ -71,7 +73,8 @@ while [ $# -gt 0 ]; do
 	-u | --unmount)  CMD=unmount;;
 	-U | --upload)   CMD=upload;;
 
-        -t | --target)   TARGET_TYPE="$2"; shift;;
+        -s | --size)     DISK_SIZE="$2"; shift;;
+        -t | --type)     DISK_INTERFACE="$2"; shift;;
         -d | --display)  VNC_DISPLAY="$2"; shift;;
         -x | --extra)    EXTRA_QEMU_OPTIONS="$2"; shift;;
         -n | --name)     IMAGE_NAME="$2"; shift;;
@@ -93,8 +96,9 @@ if [ -n "$HELP" ]; then
   echo "  --umount  partition.img"
   echo "  --upload  partition.img"
   echo "Options:"
-  echo "  --target type     settings for install/run (linux, win-ide, win-virtio)"
-  echo "  --display num     VNC display number (default: $DEFAULT_VNC_DISPLAY)"
+  echo "  --size numBytes   disk size for install (default: $DEFAULT_DISK_SIZE)"
+  echo "  --type diskType   settings for install/run (default: $DEFAULT_DISK_INTERFACE)"
+  echo "  --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)"
   echo "  --extra-opts str  extra options to pass to QEMU for install/run"
   echo "  --name imageName  name for upload"
   echo "  --help"
@@ -156,31 +160,16 @@ function run_vm () {
     echo "$PROG: warning: using emulation: performance will be poor" >&2
   fi
 
-  # Set target-based options
+  # Set disk type options
 
-  if [ "$TARGET_TYPE" = 'linux' ]; then
-    # Assume Linux distributions can support VirtIO disks out-of-the-box.
-
-    DISK_INTERFACE=virtio
-    RAM_SIZE=2048
-    # -no-acpi (Windows needs ACPI)
-
-  elif [ "$TARGET_TYPE" = 'win-ide' ]; then
-    # Windows does not support VirtIO without special drivers, so use IDE
-    DISK_INTERFACE=ide
-    RAM_SIZE=4096
-
-  elif [ "$TARGET_TYPE" = 'win-virtio' ]; then
-    # For use after VirtIO drivers have been installed
-    DISK_INTERFACE=virtio
-    RAM_SIZE=4096
-
-  else
-    echo "$PROG: unsupported target type: $TARGET_TYPE (QEMU options)" >&2
+  if [ "$DISK_INTERFACE" != 'virtio' -a "$DISK_INTERFACE" != 'ide' ]; then
+    echo "$PROG: unsupported disk interface type: $DISK_INTERFACE (expecting: virtio or ide)" >&2
     exit 1
   fi
 
-  QEMU_OPTIONS="-m $RAM_SIZE -smp 4 -net nic -net user -usbdevice tablet"
+  RAM_SIZE=2048  # initial testing indicates more RAM does not change boot speed
+  NUM_CPUS=1     # initial testing indicates more CPUs decreases boot speed
+  QEMU_OPTIONS="-m $RAM_SIZE -smp $NUM_CPUS -net nic -net user -usbdevice tablet"
 
   # Additional mode-based options
 
@@ -221,6 +210,8 @@ function run_vm () {
   LOGFILE="q-image-create-$$.log"
   nohup $COMMAND > $LOGFILE 2>&1 &
   QEMU_PID=$!
+
+  # Detect early termination errors
   sleep 2
   if ! ps $QEMU_PID > /dev/null; then
     cat $LOGFILE
@@ -265,18 +256,7 @@ if [ "$CMD" = 'install' ]; then
 
   # Create disk image
 
-  if [ "$TARGET_TYPE" = 'linux' ]; then
-    DRIVE_SIZE=10G # 10 GiB is the standard size for NeCTAR images
-  elif [ "$TARGET_TYPE" = 'win-ide' ]; then
-    DRIVE_SIZE=30G
-  elif [ "$TARGET_TYPE" = 'win-virtio' ]; then
-    DRIVE_SIZE=30G
-  else
-    echo "$PROG: unsupported target type: $TARGET_TYPE (disk size)" >&2
-    exit 1
-  fi
-
-  QEMU_IMG_OUTPUT=`qemu-img create -f raw "$IMAGE" $DRIVE_SIZE`
+  QEMU_IMG_OUTPUT=`qemu-img create -f raw "$IMAGE" $DISK_SIZE`
   if [ $? -ne 0 ]; then
     echo "$QEMU_IMG_OUTPUT"
     echo "$PROG: qemu-image could not create disk image: $IMAGE"
