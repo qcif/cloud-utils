@@ -63,13 +63,13 @@ EXTRA_QEMU_OPTIONS=
 
 while [ $# -gt 0 ]; do
     case "$1" in
-	-i | --install)  CMD=install;;
-	-r | --run)      CMD=run;;
-	-e | --extract)  CMD=extract;;
-	-m | --mount)    CMD=mount;;
-	-u | --unmount)  CMD=unmount;;
-	-l | --label)    CMD=label;;
-	-U | --upload)   CMD=upload;;
+        -i | --install)  CMD=install;;
+        -r | --run)      CMD=run;;
+        -e | --extract)  CMD=extract;;
+        -m | --mount)    CMD=mount;;
+        -u | --unmount)  CMD=unmount;;
+        -l | --label)    CMD=label;;
+        -U | --upload)   CMD=upload;;
 
         -s | --size)     DISK_SIZE="$2"; shift;;
         -t | --type)     DISK_INTERFACE="$2"; shift;;
@@ -86,13 +86,13 @@ done
 if [ -n "$HELP" ]; then
   echo "Usage: $PROG [options] command..."
   echo "Commands:"
-  echo "  --install disc.iso disk.img"
-  echo "  --run     disk.img"
-  echo "  --extract disk.img partition.img"
-  echo "  --mount   partition.img mountPoint"
-  echo "  --umount  partition.img mountPoint"
-  echo "  --label   partition.img [volumeLabel] (default: $DEFAULT_VOLUME_LABEL)"
-  echo "  --upload  partition.img [imageName] (default: $DEFAULT_IMAGE_NAME_PREFIX ...)"
+  echo "  --install disc.iso disk.raw"
+  echo "  --run     disk.raw"
+  echo "  --extract disk.raw partition.raw"
+  echo "  --mount   partition.raw mountPoint"
+  echo "  --umount  partition.raw mountPoint"
+  echo "  --label   partition.raw [volumeLabel] (default: $DEFAULT_VOLUME_LABEL)"
+  echo "  --upload  partition.raw [imageName] (default: $DEFAULT_IMAGE_NAME_PREFIX ...)"
   echo "Options for use with install:"
   echo "  --size numBytes   disk size for install (default: $DEFAULT_DISK_SIZE)"
   echo "Options for use with install or run:"
@@ -206,7 +206,7 @@ function run_vm () {
 
   # Run QEMU in background (nohup so user can log out without stopping it)
 
-  LOGFILE="$(dirname "$IMAGE")/$(basename "$IMAGE" .img).log"
+  LOGFILE="$(dirname "$IMAGE")/$(basename "$IMAGE" .raw).log"
 
   nohup $COMMAND >> $LOGFILE 2>&1 &
   QEMU_PID=$!
@@ -327,7 +327,7 @@ elif [ "$CMD" = 'extract' ]; then
     sleep 1 # else disconnect fails because device is busy
     losetup -d "$D_DEVICE"
     echo
-    echo "$PROG: error: disk image contains multiple partitions" >&2
+    echo "$PROG: error: disk image contains incorrect number of partitions" >&2
     exit 1
   fi
 
@@ -500,7 +500,7 @@ elif [ "$CMD" = "upload" ]; then
     exit 1
   fi
   if [ -z "$IMAGE_NAME" ]; then
-    IMAGE_NAME="$DEFAULT_IMAGE_NAME_PREFIX $(date "+%F %T%:z")"
+    IMAGE_NAME="$DEFAULT_IMAGE_NAME_PREFIX $(date "+%F %H:%M")"
   fi
 
   # Check for glance program
@@ -524,11 +524,17 @@ elif [ "$CMD" = "upload" ]; then
     echo "Uploading..."
   fi
 
-  glance image-create --name "$IMAGE_NAME" \
-          --disk-format raw --container-format bare --is-public false \
-          --owner "$OS_TENANT_ID" --file "$PARTITION" || die
+  glance \
+          --insecure \
+          image-create --name "$IMAGE_NAME" \
+         --container-format bare --disk-format raw \
+          --is-public false \
+          --owner "$OS_TENANT_ID" \
+          --file "$PARTITION" || die
 
-  echo "Done"
+  if [ -n "$VERBOSE" ]; then
+    echo "Done"
+  fi
 
 else
   #----------------------------------------------------------------
