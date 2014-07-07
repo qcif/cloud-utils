@@ -127,7 +127,7 @@ fi
 #----------------------------------------------------------------
 # Check support for virtualization
 
-function run_vm () {
+run_vm () {
   MODE=$1
 
   # Determine virtualization executable
@@ -508,9 +508,11 @@ elif [ "$CMD" = "upload" ]; then
     exit 1
   fi
 
-  if [ "$UPLOAD_DISK_FORMAT" = 'raw' -a 
-        echo "$IMAGE" | grep '\.iso$' > /dev/null ]; then
-    # qemu-img claims it is raw, but is probably an ISO image
+  echo "$IMAGE" | grep '\.iso$' > /dev/null
+  if [ $? -eq 0  -a  "$UPLOAD_DISK_FORMAT" = 'raw' ]; then
+    # Filename suggests it is an ISO image and qemu-img claims is raw, since
+    # qemu-img cannot tell the difference between ISO and raw: upload as ISO
+    # since Glance does care about the difference.
     UPLOAD_DISK_FORMAT=iso
   fi
 
