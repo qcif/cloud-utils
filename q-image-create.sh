@@ -26,10 +26,6 @@ DEFAULT_DISK_FORMAT=qcow2 # for --create
 DEFAULT_DISK_INTERFACE=virtio
 DEFAULT_VNC_DISPLAY=0
 
-DEFAULT_PARTITION=1 # for --mount
-DEFAULT_MOUNT_POINT=/mnt/partition
-
-#DEFAULT_VOLUME_LABEL=bootdisk
 DEFAULT_IMAGE_NAME_PREFIX='Test image'
 
 RAM_SIZE=2048  # initial testing indicates more RAM does not change boot speed
@@ -45,12 +41,12 @@ die () {
 #----------------------------------------------------------------
 # Process command line
 
-SHORT_OPTS="cd:Df:i:rMn:o:p:s:t:uUhvx:"
+SHORT_OPTS="cd:Df:hi:n:o:rs:t:uvx:"
 
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long create,run,mount,unmount,partition:,upload,format:,disk-type:,iso:,os-type:,size:,display:,extra-opts:,name:,help,verbose,debug --options $SHORT_OPTS -- "$@"`
+  ARGS=`getopt --name "$PROG" --long create,run,upload,format:,disk-type:,iso:,os-type:,size:,display:,extra-opts:,name:,help,verbose,debug --options $SHORT_OPTS -- "$@"`
 else
   # Original getopt is available (no long option names, no whitespace, no sorting)
   ARGS=`getopt $SHORT_OPTS "$@"`
@@ -67,19 +63,14 @@ DISK_SIZE=$DEFAULT_DISK_SIZE
 DISK_FORMAT=$DEFAULT_DISK_FORMAT
 DISK_INTERFACE=$DEFAULT_DISK_INTERFACE
 ISO_IMAGES=
-PARTITION=$DEFAULT_PARTITION
 OS_TYPE=
 
-# EXTRA_QEMU_OPTIONS="-drive file=dummydisk.img,if=virtio"
 EXTRA_QEMU_OPTIONS=
 
 while [ $# -gt 0 ]; do
     case "$1" in
         -c | --create)   CMD=create;;
         -r | --run)      CMD=run;;
-        -M | --mount)    CMD=mount;;
-        -U | --unmount)  CMD=unmount;;
-#        -l | --label)    CMD=label;;
         -u | --upload)   CMD=upload;;
 
         -s | --size)     DISK_SIZE="$2"; shift;;
@@ -90,7 +81,6 @@ while [ $# -gt 0 ]; do
         -o | --os-type)  OS_TYPE="$2"; shift;;
         -d | --display)  VNC_DISPLAY="$2"; shift;;
         -x | --extra-opts) EXTRA_QEMU_OPTIONS="$2"; shift;;
-        -p | --partition)  PARTITION="$2"; shift;;
 
         -h | --help)     HELP=yes;;
         -v | --verbose)  VERBOSE=yes;;
@@ -105,10 +95,7 @@ if [ -n "$HELP" ]; then
   echo "Commands:"
   echo "  -c | --create          create disk image and boot off first CDROM"
   echo "  -r | --run             run guest system from disk image"
-#  echo "  --label   disk.raw [volumeLabel] (default: $DEFAULT_VOLUME_LABEL)"
   echo "  -u | --upload          copy disk image up into glance repository"
-  echo "  -M | --mount           mount partition from disk image"
-  echo "  -U | --unmount         unmount partition from disk image"
   echo "Create options:"
   echo "  -s | --size numBytes   size of disk to create (default: $DEFAULT_DISK_SIZE)"
   echo "  -f | --format diskFmt  disk image format to save to (default: $DEFAULT_DISK_FORMAT)"
@@ -118,8 +105,6 @@ if [ -n "$HELP" ]; then
   echo "  -t | --disk-type intf  virtual QEMU disk interface (default: $DEFAULT_DISK_INTERFACE)"
   echo "  -x | --extra-opts str  extra QEMU options, for advanced use"
   echo "  -d | --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)"
-  echo "Mount options:"
-  echo "  -p | --partition num   partition to mount (default: $DEFAULT_PARTITION)"
   echo "Upload options:"
   echo "  -n | --name imageName  name of image in glance (default: \"$DEFAULT_IMAGE_NAME_PREFIX ...\")"
   echo "  -o | --os-type value   set os_type property for image (e.g. \"windows\")"
@@ -345,151 +330,6 @@ elif [ "$CMD" = 'run' ]; then
   # Run
 
   run_vm $CMD
-
-elif [ "$CMD" = 'mount' ]; then
-  #----------------------------------------------------------------
-  # Mount
-
-  # Note: alternatively run "kpartx -av diskImage" and mount manually
-
-  if [ `id -u` -ne 0 ]; then
-    echo "$PROG: error: must be run with root privileges for --mount" >&2
-    exit 1
-  fi
-
-  if [ -z "$MOUNT_POUNT" ]; then
-    MOUNT_POINT="$DEFAULT_MOUNT_POINT"
-  fi
-
-  qemu-img info "$IMAGE" | grep 'file format: raw' >/dev/null
-  if [ $? -ne 0 ]; then
-    echo "$PROG: mount can only be used with raw format disk images" >&2
-    exit 1
-  fi
-
-  if [ -e "$MOUNT_POINT" ]; then
-    # Mount point already exists: check if it is a directory
-
-    if [ ! -d "$MOUNT_POINT" ]; then
-      echo "$PROG: error: mount point is not a directory: $MOUNT_POINT" >&2
-      exit 1
-    fi
-  else
-    # Mount point does not exist
-    if [ -n "$VERBOSE" ]; then
-      echo "$PROG: error: mount point does not exist: $MOUNT_POINT" >&2
-      exit 1
-    fi
-  fi
-
-  # Associate loopback device with disk image to determine offset of partition
-
-  D_DEVICE=`losetup -f "$IMAGE" --show`
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error: loopback mounting of disk failed" >&2
-    exit 1
-  fi
-
-  # fdisk:
-  #   -l = list partitions for device
-  #   -u = results in 512 byte sectors
-
-  NUM_PARTITIONS=$(fdisk -l -u $D_DEVICE | grep -c ^/dev/)
-  if [ $NUM_PARTITIONS -eq 0 ]; then
-    fdisk -l -u $D_DEVICE # display partitions to user
-    sleep 1 # else disconnect fails because device is busy
-    losetup -d "$D_DEVICE"
-    echo "$PROG: no partitions on disk: $IMAGE" >&2
-    exit 1
-  fi
-
-  if [ $PARTITION -gt $NUM_PARTITIONS ]; then
-    fdisk -l -u $D_DEVICE # display partitions to user
-    sleep 1 # else disconnect fails because device is busy
-    losetup -d "$D_DEVICE"
-    echo "$PROG: no partition $PARTITION: $IMAGE only has $NUM_PARTITIONS partitions" >&2
-    exit 1
-  fi
-
-  OFFSET=$(fdisk -l -u $D_DEVICE | grep ^/dev/ | awk "{ N++; if (N==$PARTITION){print \$3 * 512} }")
-  if [ $? -ne 0  -o  -z "$OFFSET" ]; then
-    fdisk -l -u $D_DEVICE # display partitions to user
-    sleep 1 # else disconnect fails because device is busy
-    losetup -d "$D_DEVICE"
-    echo "$PROG: could not work out partititon offset" >&2
-    exit 1
-  fi
-
-  sleep 1 # else disconnect fails because device is busy
-  losetup -d "$D_DEVICE"  # disconnect loopback mounted disk
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error: disconnect error: $D_DEVICE" >&2
-    exit 1
-  fi
-
-#  # Associate loopback device with the partition
-#
-#  P_DEVICE=$(losetup -o $OFFSET -f "$IMAGE" --show)
-#  if [ $? -ne 0 ]; then
-#    echo "$PROG: error: loopback mounting of partition failed" >&2
-#    exit 1
-#  fi
-
-  # Mount it
-
-  mount -o "loop,offset=$OFFSET" "$IMAGE" "$MOUNT_POINT" || die
-  # Edit /etc/fstab and rc.local
-
-  if [ -n "$VERBOSE" ]; then
-    echo "Partition $PARTITION of $IMAGE mounted on $MOUNT_POINT"
-  fi
-
-elif [ "$CMD" = 'unmount' ]; then
-  #----------------------------------------------------------------
-  # Unmount
-
-  if [ `id -u` -ne 0 ]; then
-    echo "$PROG: error: must be run with root privileges for --unmount" >&2
-    exit 1
-  fi
-
-  if [ -z "$MOUNT_POINT" ]; then
-    MOUNT_POINT="$DEFAULT_MOUNT_POINT"
-  fi
-
-  if [ ! -d "$MOUNT_POINT" ]; then
-    echo "$PROG: error: mount point not found: $MOUNT_POINT" >&2
-    exit 1
-  fi
-
-  umount "$MOUNT_POINT" || die
-
-#elif [ "$CMD" = 'label' ]; then
-#  #----------------------------------------------------------------
-#  # Label
-#
-#  if [ $# -lt 1 ]; then
-#    echo "$PROG: usage error: --label expects partitionImage and optional name" >&2
-#    exit 2
-#  elif [ $# -gt 2 ]; then
-#    echo "$PROG: too many arguments (use -h for help)" >&2
-#    exit 2
-#  fi
-#  PARTITION="$1"
-#  VOLUME_LABEL="$2"
-#  if [ ! -f "$PARTITION" ]; then
-#    echo "$PROG: error: file not found: $PARTITION" >&2
-#    exit 1
-#  fi
-#  if [ -z "$VOLUME_LABEL" ]; then
-#    VOLUME_LABEL="$DEFAULT_VOLUME_LABEL"
-#    exit 1
-#  fi
-#
-#  # Change label of image to value in /etc/fstab
-#
-#  echo "Setting volume label to \"$VOLUME_LABEL\""
-#  tune2fs -L "$VOLUME_LABEL" "$PARTITION" || die
 
 elif [ "$CMD" = "upload" ]; then
   #----------------------------------------------------------------

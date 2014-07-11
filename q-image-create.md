@@ -32,26 +32,18 @@ Run the disk image.
 
 Upload a disk image to OpenStack glance.
 
-  -M | --mount disk.raw mountPoint
-
-Mount a partition from the disk image.
-
-  -U | --unmount mountPoint
-
-Unmount a partition from the disk image.
-
 Create options:
   -s | --size numBytes   size of disk to create (default: 10G)
   -f | --format fmt      disk image format to save to (default: qcow2)
-                         Note: mount/unmount only works with the raw format
+
 Create or run options:
   -d | --display num     VNC server display (default: 0)
   -D | --disk-type intf  virtual QEMU disk interface (default: virtio)
   -e | --extra-opts str  extra options to pass to QEMU
-Mount options:
-  -p | --partition num   partition to mount (default: 1)
+
 Upload options:
   -O | --os-type value   set os_type property for image (e.g. "windows")
+
 Common options:
   -h | --help            show this help message
   -v | --verbose         show extra information
