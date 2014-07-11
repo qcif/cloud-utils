@@ -3,178 +3,99 @@ q-image-create
 
 Utility to help create virtual machine image for NeCTAR.
 
-**Note: This script (and this documentation) is currently under development.**
-
 Synopsis
 --------
 
     q-image-create.sh
 
-	
 Description
 -----------
 
+This script runs the qemu-kvm emmulator and glance client program with
+parameters for creating virtual machine images for use on the
+[NeCTAR](http://www.nectar.org.au) deployment of OpenStack.
 
 
-Requirements
-------------
 
-Creation system requires KVM.
+Usage: q-image-create [options] commandArguments
+Commands:
 
-On systems using YUM:
+ -c | --create disc.iso disk.img
 
-    sudo yum install qemu-kvm
-    yum install python-glanceclient
+Create a new disk image and boot off the ISO.
 
-On systems using apt-get:
+  -r | --run disk.img
 
-    apt-get install qemu-kvm cloud-utils
-    apt-get install glance
+Run the disk image.
+
+  -u | --upload disk.img [imageName] (default name: "Test image ...")
+
+Upload a disk image to OpenStack glance.
+
+  -M | --mount disk.raw mountPoint
+
+Mount a partition from the disk image.
+
+  -U | --unmount mountPoint
+
+Unmount a partition from the disk image.
+
+Create options:
+  -s | --size numBytes   size of disk to create (default: 10G)
+  -f | --format fmt      disk image format to save to (default: qcow2)
+                         Note: mount/unmount only works with the raw format
+Create or run options:
+  -d | --display num     VNC server display (default: 0)
+  -D | --disk-type intf  virtual QEMU disk interface (default: virtio)
+  -e | --extra-opts str  extra options to pass to QEMU
+Mount options:
+  -p | --partition num   partition to mount (default: 1)
+Upload options:
+  -O | --os-type value   set os_type property for image (e.g. "windows")
+Common options:
+  -h | --help            show this help message
+  -v | --verbose         show extra information
+
+
 
 
 Examples
 --------
 
-This example walks through the process of creating a virtual machine
-instance on a creation host that is running on a NeCTAR VM instance.
-A physical machine (or a non-NeCTAR virtual machine) can also be used
-as the creation host.
+Guides are available to show the use of this script for creating
+images for:
 
-### Setup host and get necessary files
+- [CentOS 6.5](image-centos.md)
+- [Windows Server 2012 R2](image-win2012r2.md)
 
-Create the creation host NeCTAR VM instance to run Ubuntu Linux. This
-example uses the "NeCTAR Ubuntu 13.04 (Raring) amd64 UEC" image. This
-creation host must have 8GiB of memory or more, since the guest
-running inside the host will be allocated 4GiB of memory.
+Requirements
+------------
 
-Login into the creation host and create a ssh tunnel from a local port
-(in this example 6900 is used) to the VNC port (5900) on the remote machine:
+Creation host system requires QEMU KVM and the OpenStack glance client.
 
-    $ ssh -L 6900:localhost:5900 ubuntu@creation.host
+On systems using YUM:
 
-Create a working area on the ephemeral disk. The default home
-directory is on the boot disk (which is 10GiB in size), so it is not
-big enough to hold the created image (which will also be 10GiB in
-size) plus working files.
+    # yum install qemu-kvm
+    # yum install python-glanceclient
 
-    $ sudo mkdir /mnt/genesis
-	$ sudo chown ubuntu /mnt/genesis
-	$ sudo chgrp ubuntu /mnt/genesis
-	$ cd /mnt/genesis
+On systems using apt-get:
 
-Obtain a copy of the script.
-
-    $ curl -O https://raw.github.com/qcif/cloud-utils/master/q-image-create.sh
-	$ chmod a+x q-image-create.sh
-
-Obtain a copy of the ISO image to install.
-
-    $ curl -L -O http://download.fedoraproject.org/.../Fedora-19-x86_64-DVD.iso
-
-### Phase 1: install from ISO to drive
-
-Run a guest virtual machine by booting off the install ISO image and
-create a new disk image to install onto. The following command will
-start the guest virtual machine and set VNC to have an empty
-password. It will stay running, with the qemu console ready to accept
-a command.
-
-    $ ./q-image-create.sh --install Fedora-19-x86_64-DVD.iso disk.img
-
-Connect to the VNC server (i.e. to port 6900 of the local machine).
-
-Warning: If the local machine is a Macintosh do not use the _Screen
-Sharing_ client that comes with OS X, because it is incompatible with
-the VNC implementation provided by QEMU/KVM: use a third party VNC
-client.
-
-The VNC password is empty, just press return when prompted for it. If
-you are paranoid about security, the VNC password can be set by
-entering the command "change vnc password".
-
-Install the operating system normally, using the entire 10GiB drive
-for one partition that mounts on "/".  Select "custom disk
-partitioning", "Review and modify partitioning layout" or a similar
-option to do this: the default automatic partition will usually create
-an unwanted swap partition.  Ignore any warnings about not having a
-swap partition.
-
-When the installation has finished (i.e. after shutting down the guest
-virtual machine), close the VNC client then stop the guest virtual
-machine by typing "quit" into the qemu console.
-
-    (qemu) quit
-
-Other useful commands:
-
-- system_reset - reboot the virtual machine
-- boot_set - set boot device (e.g. "c" for first hard disk, "d" for CDROM)
-- info vnc - show VNC client and server details
-- (tab key) - brief list of commands
-
-- info block
-- change ide1-cd0 ....iso
-- eject ide1-cd0
-
-### Phase 2: run from drive to configure
-
-Run a guest virtual machine by booting off the disk image. The
-following command will start the guest virtual machine and set VNC to
-have an empty password.
-
-    $ ./q-image-create.sh --run disk.img
-	
-As before, connect to the VNC server (through the ssh tunnel) with an
-empty password.
-
-    localhost$ open vnc://localhost:6900
-
-Perform any necessary software installation and configurations necessary
-to create the image. This will depend on the operating system and
-purpose of the image, but the following are the recommended
-minimum configurations.
-
-#### Update the operating system
-
-Install security patches and updates.
-
-    guest$ sudo yum update
-
-#### Change disk image name
+    # apt-get install qemu-kvm cloud-utils
+    # apt-get install glance
 
 
-#### Remove ssh server key
+Examples
+--------
 
-
-
-
-
-### Phase 3: extract partition from the disk image
-
-    $ ./q-image-create.sh --extract disk.img part.img
-	
-### Phase 4: mount and umount
-
-    $ ./q-image-create.sh --mount part.img
-	
-Modify files and directories on the file system as needed.
-
-    $ ./q-image-create.sh --umount part.img
-	
-### Phase 5: upload
-
-    $ ./q-image-create.sh --upload part.img
-
-### Use the image
-
-Log into the NecTAR Dashboard.
+- [Creating an image for CentOS 6.5](image-centos.md)
+- [Creating an image for Windows Server 2012 R25](image-win2012r2.md)
 
 Environment
 -----------
 
-This script is designed to run on Ubuntu.
+This script is has been tested on CentOS 6.5 and Ubuntu.
 
-This script must be run with root privileges.
+Some commands of this script must be run with root privileges.
 
 
 Files
@@ -184,12 +105,26 @@ Files
 Diagnosis
 ---------
 
+### Program not found: glance
+
+The OpenStack glance client has not been installed. Install it.
+
 ### MP-BIOS bug: 8254 timer not connected
 
-The workaround is to use "noapic" option when booting.
+The guest operating system does not support APIC.  Inform QEMU to use
+"noapic" option when booting.  Add `--extra-opts "--noapic"` when
+using the create or run commands.
+
+#####  Cannot set up guest memory 'pc.ram': Cannot allocate memory
+
+The RAM size for the guest is too large for the host. Use a creation
+host system with more memory. Alternatively, edit the script and
+reduce the RAM_SIZE variable.
 
 See also
 --------
+
+- [OpenStack Virtual Machine Image Guide](http://docs.openstack.org/image-guide/content/ch_preface.html)
 
 Bugs
 ----

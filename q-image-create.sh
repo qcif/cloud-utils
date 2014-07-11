@@ -27,9 +27,13 @@ DEFAULT_DISK_INTERFACE=virtio
 DEFAULT_VNC_DISPLAY=0
 
 DEFAULT_PARTITION=1 # for --mount
+DEFAULT_MOUNT_POINT=/mnt/partition
 
 #DEFAULT_VOLUME_LABEL=bootdisk
 DEFAULT_IMAGE_NAME_PREFIX='Test image'
+
+RAM_SIZE=2048  # initial testing indicates more RAM does not change boot speed
+NUM_CPUS=1     # initial testing indicates more CPUs decreases boot speed
 
 #----------------------------------------------------------------
 
@@ -41,12 +45,12 @@ die () {
 #----------------------------------------------------------------
 # Process command line
 
-SHORT_OPTS="cd:D:f:grMO:p:s:Uhvx:"
+SHORT_OPTS="cd:Df:i:rMn:o:p:s:t:uUhvx:"
 
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long create,run,mount,unmount,partition:,upload,format:,disk-type:,os-type:,size:,display:,extra-opts:,help,verbose --options $SHORT_OPTS -- "$@"`
+  ARGS=`getopt --name "$PROG" --long create,run,mount,unmount,partition:,upload,format:,disk-type:,iso:,os-type:,size:,display:,extra-opts:,name:,help,verbose,debug --options $SHORT_OPTS -- "$@"`
 else
   # Original getopt is available (no long option names, no whitespace, no sorting)
   ARGS=`getopt $SHORT_OPTS "$@"`
@@ -62,6 +66,7 @@ VNC_DISPLAY=$DEFAULT_VNC_DISPLAY
 DISK_SIZE=$DEFAULT_DISK_SIZE
 DISK_FORMAT=$DEFAULT_DISK_FORMAT
 DISK_INTERFACE=$DEFAULT_DISK_INTERFACE
+ISO_IMAGES=
 PARTITION=$DEFAULT_PARTITION
 OS_TYPE=
 
@@ -79,40 +84,45 @@ while [ $# -gt 0 ]; do
 
         -s | --size)     DISK_SIZE="$2"; shift;;
         -f | --format)   DISK_FORMAT="$2"; shift;;
-        -T | --disk-type) DISK_INTERFACE="$2"; shift;;
-        -O | --os-type)  OS_TYPE="$2"; shift;;
+        -t | --disk-type) DISK_INTERFACE="$2"; shift;;
+        -i | --iso)      ISO_IMAGES="$ISO_IMAGES $2"; shift;;
+        -n | --name)     IMAGE_NAME="$2"; shift;;
+        -o | --os-type)  OS_TYPE="$2"; shift;;
         -d | --display)  VNC_DISPLAY="$2"; shift;;
-        -x | --extra)    EXTRA_QEMU_OPTIONS="$2"; shift;;
-        -p | --partition)PARTITION="$2"; shift;;
+        -x | --extra-opts) EXTRA_QEMU_OPTIONS="$2"; shift;;
+        -p | --partition)  PARTITION="$2"; shift;;
 
         -h | --help)     HELP=yes;;
         -v | --verbose)  VERBOSE=yes;;
+        -D | --debug)    DEBUG=yes;;
         --)              shift; break;; # end of options
     esac
     shift
 done
 
 if [ -n "$HELP" ]; then
-  echo "Usage: $PROG [options] commandArguments"
+  echo "Usage: $PROG [options] diskImage"
   echo "Commands:"
-  echo "  -c | --create disc.iso disk.img"
-  echo "  -r | --run disk.img"
+  echo "  -c | --create          create disk image and boot off first CDROM"
+  echo "  -r | --run             run guest system from disk image"
 #  echo "  --label   disk.raw [volumeLabel] (default: $DEFAULT_VOLUME_LABEL)"
-  echo "  -u | --upload disk.img [imageName] (default name: \"$DEFAULT_IMAGE_NAME_PREFIX ...\")"
-  echo "  -M | --mount disk.raw mountPoint"
-  echo "  -U | --unmount mountPoint"
+  echo "  -u | --upload          copy disk image up into glance repository"
+  echo "  -M | --mount           mount partition from disk image"
+  echo "  -U | --unmount         unmount partition from disk image"
   echo "Create options:"
   echo "  -s | --size numBytes   size of disk to create (default: $DEFAULT_DISK_SIZE)"
-  echo "  -f | --format fmt      disk image format to save to (default: $DEFAULT_DISK_FORMAT)"
+  echo "  -f | --format diskFmt  disk image format to save to (default: $DEFAULT_DISK_FORMAT)"
   echo "                         Note: mount/unmount only works with the raw format"
   echo "Create or run options:"
+  echo "  -i | --iso isofile     attach as a CDROM (repeat for multiple ISO images)"
+  echo "  -t | --disk-type intf  virtual QEMU disk interface (default: $DEFAULT_DISK_INTERFACE)"
+  echo "  -x | --extra-opts str  extra QEMU options, for advanced use"
   echo "  -d | --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)"
-  echo "  -D | --disk-type intf  virtual QEMU disk interface (default: $DEFAULT_DISK_INTERFACE)"
-  echo "  -e | --extra-opts str  extra options to pass to QEMU"
   echo "Mount options:"
   echo "  -p | --partition num   partition to mount (default: $DEFAULT_PARTITION)"
   echo "Upload options:"
-  echo "  -O | --os-type value   set os_type property for image (e.g. \"windows\")"
+  echo "  -n | --name imageName  name of image in glance (default: \"$DEFAULT_IMAGE_NAME_PREFIX ...\")"
+  echo "  -o | --os-type value   set os_type property for image (e.g. \"windows\")"
   echo "Common options:"
   echo "  -h | --help            show this help message"
   echo "  -v | --verbose         show extra information"
@@ -123,6 +133,59 @@ if [ -z "$CMD" ]; then
   echo "$PROG: usage error: missing a command option (use -h for help)" >&2
   exit 2
 fi
+
+# Check argument is the diskImage
+
+if [ $# -lt 1 ]; then
+  echo "$PROG: usage error: missing diskImage filename" >&2
+  exit 2
+elif [ $# -gt 1 ]; then
+  echo "$PROG: too many arguments (use -h for help)" >&2
+  exit 2
+fi
+
+IMAGE="$1"
+
+if [ "$CMD" = 'create' ]; then
+  # Disk image MUST NOT exist
+  if [ -f "$IMAGE" ]; then
+      echo "$PROG: error: image file exists (use --run, or delete it to use --create): $IMAGE" >&2
+      exit 1
+    fi
+else
+  # Disk image MUST exist
+  if [ ! -e "$IMAGE" ]; then
+    echo "$PROG: error: file not found: $IMAGE" >&2
+    exit 1
+  fi
+  if [ ! -f "$IMAGE" ]; then
+    echo "$PROG: error: disk image is not a file: $IMAGE" >&2
+    exit 1
+  fi
+  if [ ! -r "$IMAGE" ]; then
+    echo "$PROG: error: cannot read disk image: $IMAGE" >&2
+    exit 1
+  fi
+fi
+
+# Convert ISO image options into qemu-kvm option to mount them
+# Drive index 0 is the hard disk. The ISO images are CDROM index 1, 2, 3, etc.
+
+if [ -n "$ISO_IMAGES" -a \( "$CMD" != 'create' -a "$CMD" != 'run' \) ]; then
+  echo "$PROG: usage error: --iso is only used with --create or --run" >&2
+  exit 2
+fi
+
+INDEX=0
+CDROM_OPTIONS=
+for IMG in $ISO_IMAGES; do
+  if [ ! -r "$IMG" ]; then
+    echo "$PROG: error: cannot read ISO file: $IMG" >&2
+    exit 1
+  fi
+  INDEX=$(($INDEX + 1))
+  CDROM_OPTIONS="$CDROM_OPTIONS -drive file=$IMG,index=$INDEX,media=cdrom"
+done
 
 #----------------------------------------------------------------
 # Check support for virtualization
@@ -174,19 +237,17 @@ run_vm () {
     exit 1
   fi
 
-  RAM_SIZE=2048  # initial testing indicates more RAM does not change boot speed
-  NUM_CPUS=1     # initial testing indicates more CPUs decreases boot speed
   QEMU_OPTIONS="-m $RAM_SIZE -smp $NUM_CPUS -net nic,model=virtio -net user -usbdevice tablet"
 
   # Additional mode-based options
 
   if [ "$MODE" = 'create' ]; then
-    # Attached CD-ROM ISO; first boot off it and subsequently boot off disk
-    CDROM_OPTIONS="-cdrom $ISO_FILE -boot order=cd,once=d"
+    # First boot off ISO and subsequently boot off the disk drive
+    BOOT_ORDER_OPTIONS="-boot order=cd,once=d"
 
   elif [ "$MODE" = 'run' ]; then
-    # No CD-ROM; boot off disk drive
-    CDROM_OPTIONS="-boot order=c"
+    # Boot off the disk drive
+    BOOT_ORDER_OPTIONS="-boot order=c"
 
   else
     echo "$PROG: internal error: unknown mode: $MODE" >&2
@@ -198,12 +259,12 @@ run_vm () {
   COMMAND="$QEMU_EXEC $QEMU_OPTIONS \
     -drive file=$IMAGE,if=$DISK_INTERFACE,index=0 \
     $CDROM_OPTIONS \
+    $BOOT_ORDER_OPTIONS \
     $EXTRA_QEMU_OPTIONS \
     -vnc 127.0.0.1:$VNC_DISPLAY"
 
-  if [ -n "$VERBOSE" ]; then
-    echo $COMMAND
-    echo
+  if [ -n "$DEBUG" ]; then
+    echo "$PROG: running: $COMMAND"
   fi
 
   # -monitor stdio
@@ -222,15 +283,19 @@ run_vm () {
   sleep 2
   if ! ps $QEMU_PID > /dev/null; then
     # QEMU process no longer running
-    echo "$PROG: QEMU error (log file: $LOGFILE)" 2>&1
+    echo "$PROG: QEMU error (see log file: $LOGFILE)" 2>&1
     exit 1
   fi
   echo "$PROG: $(date "+%F %T%:z"): QEMU PID: $QEMU_PID" >> $LOGFILE
 
   if [ -n "$VERBOSE" ]; then
     PORT=$((5900 + $VNC_DISPLAY))
-    echo "VNC display: $VNC_DISPLAY = port $PORT (no password required)"
-    echo "When done, shutdown guest or enter 'quit' in QEMU console."
+    echo "Guest system on VNC display $VNC_DISPLAY = port $PORT (no password required)"
+    echo "  When finished, shutdown guest or enter 'quit' in QEMU console (Ctrl-Alt-2)"
+  fi
+
+  if [ -n "$DEBUG" ]; then
+    echo "PID: $QEMU_PID"
   fi
 }
 
@@ -239,26 +304,15 @@ run_vm () {
 if [ "$CMD" = 'create' ]; then
   # Create
 
-  if [ $# -lt 2 ]; then
-    echo "$PROG: usage error: --create expects ISOfile and diskImage" >&2
-    exit 2
-  elif [ $# -gt 2 ]; then
-    echo "$PROG: too many arguments (use -h for help)" >&2
-    exit 2
-  fi
-  ISO_FILE="$1"
-  IMAGE="$2"
-  if [ ! -f "$ISO_FILE" ]; then
-    echo "$PROG: error: ISO disc file not found: $ISO_FILE" >&2
-    exit 1
-  fi
-  if [ -f "$IMAGE" ]; then
-    echo "$PROG: error: image file exists (use --run, or delete it to use --create): $IMAGE" >&2
-    exit 1
-  fi
+  # Check create parameters
 
   if [ "$DISK_FORMAT" != 'raw' -a "$DISK_FORMAT" != 'qcow2' ]; then
     echo "$PROG: unknown format (expecting 'raw' or 'qcow2'): $DISK_FORMAT" >&2
+    exit 1
+  fi
+
+  if [ -z "$CDROM_OPTIONS" ]; then
+    echo "$PROG: usage error: --create requires at least one --iso image" >&2
     exit 1
   fi
 
@@ -278,8 +332,7 @@ if [ "$CMD" = 'create' ]; then
   fi
 
   if [ -n "$VERBOSE" ]; then
-    echo "Creating disk image file: $QEMU_IMG_OUTPUT"
-    echo
+    echo "Creating disk image: $QEMU_IMG_OUTPUT"
   fi
 
   # Run virtualization
@@ -290,18 +343,6 @@ if [ "$CMD" = 'create' ]; then
 elif [ "$CMD" = 'run' ]; then
   #----------------------------------------------------------------
   # Run
-  if [ $# -lt 1 ]; then
-    echo "$PROG: usage error: --run expects diskImage" >&2
-    exit 2
-  elif [ $# -gt 1 ]; then
-    echo "$PROG: too many arguments (use -h for help)" >&2
-    exit 2
-  fi
-  IMAGE="$1"
-  if [ ! -f "$IMAGE" ]; then
-    echo "$PROG: error: file not found: $IMAGE" >&2
-    exit 1
-  fi
 
   run_vm $CMD
 
@@ -316,18 +357,8 @@ elif [ "$CMD" = 'mount' ]; then
     exit 1
   fi
 
-  if [ $# -lt 2 ]; then
-    echo "$PROG: usage error: --mount expects image and mountPoint" >&2
-    exit 2
-  elif [ $# -gt 2 ]; then
-    echo "$PROG: too many arguments (use -h for help)" >&2
-    exit 2
-  fi
-  IMAGE="$1"
-  MOUNT_POINT="$2"
-  if [ ! -f "$IMAGE" ]; then
-    echo "$PROG: error: file not found: $IMAGE" >&2
-    exit 1
+  if [ -z "$MOUNT_POUNT" ]; then
+    MOUNT_POINT="$DEFAULT_MOUNT_POINT"
   fi
 
   qemu-img info "$IMAGE" | grep 'file format: raw' >/dev/null
@@ -422,14 +453,10 @@ elif [ "$CMD" = 'unmount' ]; then
     exit 1
   fi
 
-  if [ $# -lt 1 ]; then
-    echo "$PROG: usage error: --unmount expects mountPoint" >&2
-    exit 2
-  elif [ $# -gt 1 ]; then
-    echo "$PROG: too many arguments (use -h for help)" >&2
-    exit 2
+  if [ -z "$MOUNT_POINT" ]; then
+    MOUNT_POINT="$DEFAULT_MOUNT_POINT"
   fi
-  MOUNT_POINT="$1"
+
   if [ ! -d "$MOUNT_POINT" ]; then
     echo "$PROG: error: mount point not found: $MOUNT_POINT" >&2
     exit 1
@@ -468,19 +495,6 @@ elif [ "$CMD" = "upload" ]; then
   #----------------------------------------------------------------
   # Upload
 
-  if [ $# -lt 1 ]; then
-    echo "$PROG: usage error: --upload expects image and optional name" >&2
-    exit 2
-  elif [ $# -gt 2 ]; then
-    echo "$PROG: too many arguments (use -h for help)" >&2
-    exit 2
-  fi
-  IMAGE="$1"
-  IMAGE_NAME="$2"
-  if [ ! -f "$IMAGE" ]; then
-    echo "$PROG: error: file not found: $IMAGE" >&2
-    exit 1
-  fi
   if [ -z "$IMAGE_NAME" ]; then
     IMAGE_NAME="$DEFAULT_IMAGE_NAME_PREFIX $(date "+%F %H:%M%:z")"
   fi
