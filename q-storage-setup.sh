@@ -350,6 +350,7 @@ DEVICE="eth1"
 BOOTPROTO="dhcp"
 #NM_CONTROLLED="yes"
 ONBOOT="yes"
+DEFROUTE=no
 TYPE="Ethernet"
 #
 ## MTU size is provided by DHCP. If not, uncomment the following lines.
