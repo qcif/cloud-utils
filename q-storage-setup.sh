@@ -23,11 +23,6 @@ PROG=`basename $0`
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
-NFS_SERVER_STAGE1=10.255.100.50
-NFS_SERVER_STAGE2=10.255.120.200
-NFS_PATH_STAGE1=/collection
-NFS_PATH_STAGE2=/tier2a
-
 MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 MOUNT_OPTIONS_YUM=nolock
 MOUNT_OPTIONS_APT=
@@ -49,10 +44,10 @@ FORCE=
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,stage:,verbose --options hd:amuf:s:v -- "$@"`
+  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,tier:,verbose --options hd:amuf:t:v -- "$@"`
 else
   # Original getopt is available (no long option names nor whitespace)
-  ARGS=`getopt hd:amuf:s:v "$@"`
+  ARGS=`getopt hd:amuf:t:v "$@"`
 fi
 if [ $? -ne 0 ]; then
   echo "$PROG: usage error (use -h for help)" >&2
@@ -65,7 +60,7 @@ while [ $# -gt 0 ]; do
         -a | --autofs)   DO_AUTOFS=yes;;
         -m | --mount)    DO_MOUNT=yes;;
         -u | --umount)   DO_UMOUNT=yes;;
-        -s | --stage)    STAGE="$2"; shift;;
+        -t | --tier)     TIER="$2"; shift;;
         -d | --dir)      DIR="$2"; shift;;
         -f | --force)    FORCE="$2"; shift;;
         -v | --verbose)  VERBOSE=yes;;
@@ -75,9 +70,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# 2c3
+
 if [ -n "$HELP" ]; then
   echo "Usage: $PROG [options] storageID..."
   echo "Options:"
+  echo "  -t | --tier name  where the storage is (e.g. \"1a\" or \"3a1\")"
+  echo
   echo "  -a | --autofs     configure and use autofs mode (default)"
   echo "  -m | --mount      perform ad hoc mount mode"
   echo "  -u | --umount     perform ad hoc unmount mode"
@@ -86,7 +85,6 @@ if [ -n "$HELP" ]; then
   echo "                    default for autofs: $DEFAULT_AUTO_MOUNT_DIR"
   echo "                    default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR"
   echo "  -f | --force pkg  set package manager type (\"yum\" or \"apt\")"
-  echo "  -s | --stage name which NFS server to use (\"stage1\" or \"stage2\")"
   echo
   echo "  -v | --verbose    show extra information"
   echo "  -h | --help       show this message"
@@ -191,56 +189,33 @@ if [ -n "$ERROR" ]; then
 fi
 
 #----------------
-# Stage
-# Note: must do this after determining ALLOC is correct
+# Tier
 
-# Check/determine stage
-
-if [ -z "$STAGE" ]; then
-  # Attempt to automatically determine which NFS server to use
-
-  which ip >/dev/null 2>&1
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error: command not available: ip" >&2
-    exit 1
-  fi
-
-  ip -f inet addr | grep '203\.101\.' >/dev/null 2>&1
-  if [ $? -eq 0 ]; then
-    # Has an IP address in the Stage 2 facility
-    STAGE=stage2
-  else
-    ip -f inet addr | grep '130\.102\.' >/dev/null 2>&1
-    if [ $? -eq 0 ]; then
-      # Has an IP address in the Stage 1 facility
-      STAGE=stage1
-    fi
-  fi
-
-  if [ -z "$STAGE" ]; then
-    echo "$PROG: error: cannot determine stage (please specify with --stage)" >&2
-    exit 2
-  fi
-  
-fi
-
-# Set parameters based on stage
-
-if [ "$STAGE" = 'stage1' ]; then
-
-  NFS_SERVER=$NFS_SERVER_STAGE1
-  NFS_PATH="$NFS_PATH_STAGE1"
-
-elif [ "$STAGE" = 'stage2' ]; then
-
-  NFS_SERVER=$NFS_SERVER_STAGE2
-  NFS_PATH="$NFS_PATH_STAGE2"
-
-else
-  echo "$PROG: usage error: unknown stage (expecting 'stage1' or 'stage2'): $STAGE" >&2
+if [ -z "$TIER" ]; then
+  echo "$PROG: usage error: missing --tier option" >&2
   exit 2
 fi
 
+echo "$TIER" | grep -E '^[1234][abcd_][1-9]?$' >/dev/null
+if [ $? -ne 0 ]; then
+  echo "$PROG: error: unsupported tier: $TIER (expecting 1b, 1c2, 2a, 2c1, 2c2 etc)" >&2
+  exit 1
+fi
+
+SERVER=`echo $TIER | cut -c 1`
+
+if [ "$SERVER" = '1' ]; then
+  NFS_SERVER=10.255.120.223
+elif [ "$SERVER" = '2' ]; then
+  NFS_SERVER=10.255.120.200
+elif [ "$SERVER" = '3' ]; then
+  NFS_SERVER=10.255.120.226
+else
+  echo "$PROG: error: unknown server: $SERVER from tier $TIER" >&2
+  exit 1
+fi
+
+NFS_PATH=/tier${TIER}
 
 #----------------------------------------------------------------
 # Check pre-conditions
@@ -267,6 +242,7 @@ if [ -z "$FORCE" ]; then
   ASCIID=`echo "$DISTRO" | tr -c ' -~' 'X'`
   if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
        "$DISTRO" = 'CentOS release 6.5 (Final)' -o \
+       "$DISTRO" = 'CentOS Linux release 7.0.1406 (Core) ' -o \
        "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' -o \
        "$DISTRO" = 'Scientific Linux release 6.5 (Carbon)' -o \
        "$ASCIID" = 'Fedora release 19 (SchrXXdingerXXXs Cat)X' -o \
@@ -282,7 +258,7 @@ if [ -z "$FORCE" ]; then
       ]; then
     FLAVOUR=apt
   else
-    echo "$PROG: error: unsupported distribution: $DISTRO (use --force yum|apt)"
+    echo "$PROG: error: unsupported distribution: \"$DISTRO\" (use --force yum|apt)"
     exit 1
   fi
 else

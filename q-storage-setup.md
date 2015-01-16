@@ -7,6 +7,7 @@ Synopsis
 --------
 
     q-storage-setup.sh
+        [ -t | --tier] code
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
         [ -d | --dir dirname] [ -f | --force pkg]
         [ -s | --stage name]
@@ -27,6 +28,9 @@ of these options:
 - `-h | --help` shows help information.
 
 Other options are:
+
+- `-t --tier code` sets the storage tier for the storage. This
+is usually a value like "1a", "2a", "2c1", "2c2", etc.
 
 - `-d --dir name` sets the directory containing the mount point. The
 directory must be an absolute directory (i.e. starting with a
@@ -121,9 +125,9 @@ q-storage-setup.sh file.
 Mount storage allocation Q0039, examine its contents and unmount it. Since the
 script reqires root privileges, the _sudo_ command is used.
 
-    $ sudo ./q-storage-setup.sh --mount Q0039
+    $ sudo ./q-storage-setup.sh --mount --tier 2a Q0039
     $ sudo ls /mnt/Q0039
-    $ sudo ./q-storage-setup.sh --umount Q0039
+    $ sudo ./q-storage-setup.sh --umount --tier 2a Q0039
 
 Remember, the first execution of the script might take a few minutes
 to run. This is because it needs to download and install the dependent
@@ -134,7 +138,7 @@ anything out. Add the "--verbose" option to see its progress.
 
 Configure autofs and examine its contents.
 
-    $ sudo ./q-storage-setup.sh Q0039
+    $ sudo ./q-storage-setup.sh --tier 2a Q0039
     $ sudo ls /data/Q0039
 
 
@@ -155,6 +159,7 @@ installed from the NeCTAR official images):
 
 - CentOS 6.4 x86_64
 - CentOS 6.5 x86_64
+- CentOS 7.0 x86_64
 - Fedora 19 x86_64
 - Fedora 20 x86_64
 - Scientific Linux 6.4 x86_64
