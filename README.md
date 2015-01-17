@@ -18,11 +18,6 @@ virtual machine instance to mount RDSI storage.
 
 Setup X-Windows plus a VNC server.
 
-### [q-owncloud](q-owncloud.md)
-
-Setup _ownCloud_ on a Ubuntu virtual machine instance running on the
-QCIF cloud computing platform.
-
 ### [q-image-create](q-image-create.md)
 
 Utility to help with the process of creating a virtual machine image
