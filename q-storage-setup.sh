@@ -1,6 +1,7 @@
 #!/bin/sh
 #
-# Setup NFS mounting of storage.
+# Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
+# instances.
 #
 # Copyright (C) 2013, Queensland Cyber Infrastructure Foundation Ltd.
 #
@@ -29,6 +30,66 @@ MOUNT_OPTIONS_APT=
 
 MOUNT_AUTOFS_EXTRA=bg
 
+NFS_SERVERS="10.255.120.223 10.255.120.200 10.255.120.226"
+
+#----------------------------------------------------------------
+# Function to check for errors and abort
+
+check_ok () {
+  if [ $? -ne 0 ]; then
+    echo "$PROG: error encountered" >&2
+    exit 1
+  fi
+}
+
+#----------------------------------------------------------------
+# Function to determine NFS servers and export directory for an allocation
+#
+# Returns both the server and export path as a single string
+# (e.g. "10.255.120.200:/tier2d1/Q0039/Q0039").
+#
+# Note: this must be done after installing the NFS utilities,
+# otherwise the `showmount` command might not be installed.
+
+nfs_export () {
+  ALLOC=$1
+
+  if ! which showmount >/dev/null 2>&1; then
+    echo "$PROG: error: command not found: showmount" >&2
+    exit 1
+  fi
+
+  RESULT=
+  for NFS_SERVER in ${NFS_SERVERS}; do
+    # showmount will produce lines like "/tier2d1/Q0039/Q0039 10.255.120.8/32"
+    # The `cut` command keeps the first column and the `grep` keeps only those
+    # that ends in the desired allocation number.
+
+    MATCH=`showmount -e "$NFS_SERVER" | cut -d ' ' -f 1 | grep "${ALLOC}/${ALLOC}\$"`
+    if [ -n "$MATCH" ]; then
+      # Match or matches were found
+
+      NUM_MATCHES=`echo "$MATCH" | wc -l`
+
+      if [ -n "$RESULT" -o "$NUM_MATCHES" -ne 1 ]; then
+        # Matches from another NFS server or multiple matches were found
+	echo "$PROG: error: $ALLOC has multiple NFS exports" >&2
+	echo "$PROG: Please contact QRIScloud support to report this." >&2
+	exit 1
+      fi
+
+      RESULT="$NFS_SERVER:$MATCH"
+    fi
+  done
+
+  if [ -z "$RESULT" ]; then
+    echo "$PROG: error: could not find NFS server and export for $ALLOC" >&2
+    exit 1
+  fi
+
+  echo $RESULT
+}
+
 #----------------------------------------------------------------
 # Process command line arguments
 
@@ -44,10 +105,10 @@ FORCE=
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,tier:,verbose --options hd:amuf:t:v -- "$@"`
+  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,verbose --options hd:amuf:v -- "$@"`
 else
   # Original getopt is available (no long option names nor whitespace)
-  ARGS=`getopt hd:amuf:t:v "$@"`
+  ARGS=`getopt hd:amuf:v "$@"`
 fi
 if [ $? -ne 0 ]; then
   echo "$PROG: usage error (use -h for help)" >&2
@@ -60,7 +121,6 @@ while [ $# -gt 0 ]; do
         -a | --autofs)   DO_AUTOFS=yes;;
         -m | --mount)    DO_MOUNT=yes;;
         -u | --umount)   DO_UMOUNT=yes;;
-        -t | --tier)     TIER="$2"; shift;;
         -d | --dir)      DIR="$2"; shift;;
         -f | --force)    FORCE="$2"; shift;;
         -v | --verbose)  VERBOSE=yes;;
@@ -70,16 +130,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# 2c3
-
 if [ -n "$HELP" ]; then
   echo "Usage: $PROG [options] storageID..."
   echo "Options:"
-  echo "  -t | --tier name  where the storage is (e.g. \"1a\" or \"3a1\")"
   echo
-  echo "  -a | --autofs     configure and use autofs mode (default)"
-  echo "  -m | --mount      perform ad hoc mount mode"
-  echo "  -u | --umount     perform ad hoc unmount mode"
+  echo "  -a | --autofs     configure and use autofs (default)"
+  echo "  -m | --mount      perform ad hoc mount"
+  echo "  -u | --umount     perform ad hoc unmount"
   echo
   echo "  -d | --dir name   directory containing mount points"
   echo "                    default for autofs: $DEFAULT_AUTO_MOUNT_DIR"
@@ -173,7 +230,7 @@ do
   elif [ "$NUM" -gt 999 ]; then
     # This will cause UID/GID to violate the 54nnn pattern and
     # the behaviour is not yet defined.
-    echo "$PROG: internal error: allocations greater than 999 not supported" >&2
+    echo "$PROG: internal error: allocations over 999 not supported" >&2
     exit 3
   else
     # These numbers follow the standard pattern of Qnnnn
@@ -187,35 +244,6 @@ done
 if [ -n "$ERROR" ]; then
   exit 2
 fi
-
-#----------------
-# Tier
-
-if [ -z "$TIER" ]; then
-  echo "$PROG: usage error: missing --tier option" >&2
-  exit 2
-fi
-
-echo "$TIER" | grep -E '^[1234][abcd_][1-9]?$' >/dev/null
-if [ $? -ne 0 ]; then
-  echo "$PROG: error: unsupported tier: $TIER (expecting 1b, 1c2, 2a, 2c1, 2c2 etc)" >&2
-  exit 1
-fi
-
-SERVER=`echo $TIER | cut -c 1`
-
-if [ "$SERVER" = '1' ]; then
-  NFS_SERVER=10.255.120.223
-elif [ "$SERVER" = '2' ]; then
-  NFS_SERVER=10.255.120.200
-elif [ "$SERVER" = '3' ]; then
-  NFS_SERVER=10.255.120.226
-else
-  echo "$PROG: error: unknown server: $SERVER from tier $TIER" >&2
-  exit 1
-fi
-
-NFS_PATH=/tier${TIER}
 
 #----------------------------------------------------------------
 # Check pre-conditions
@@ -257,11 +285,6 @@ else
   fi
 fi
 
-if [ `id -u` != '0' ]; then
-  echo "$PROG: this script requires root privileges" >&2
-  exit 1
-fi
-
 #----------------------------------------------------------------
 
 if [ $FLAVOUR = 'yum' ]; then
@@ -274,26 +297,23 @@ else
 fi
 
 #----------------------------------------------------------------
-
-check_ok () {
-  if [ $? -ne 0 ]; then
-    echo "$PROG: error encountered" >&2
-    exit 1
-  fi
-}
-
-#----------------------------------------------------------------
 # Check for existance of private network interface
 
-which ip >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-  echo "$PROG: error: command not available: ip" >&2
+if ! which ip >/dev/null 2>&1; then
+  echo "$PROG: error: command not found: ip" >&2
   exit 1
 fi
 
-ip link show dev eth1 > /dev/null
-if [ $? -ne 0 ]; then
-  echo "$PROG: interface eth1 not found: not running on QRIScloud?" >&2
+if ! ip link show dev eth1 >/dev/null; then
+  echo "$PROG: eth1 not found: not running on a QRIScloud virtual machine?" >&2
+  exit 1
+fi
+
+#----------------------------------------------------------------
+# Check if runing with root privileges
+
+if [ `id -u` != '0' ]; then
+  echo "$PROG: error: this script requires root privileges" >&2
   exit 1
 fi
 
@@ -386,12 +406,19 @@ if [ $? -ne 0 ]; then
   echo "$PROG: warning: DHCP did not set eth1 MTU to 9000 bytes" >&2
 fi
 
-#----------------------------------------------------------------
-# Check NFS server is accessible
+# Check NFS servers are accessible
 
-ping -c 1 $NFS_SERVER > /dev/null
-if [ $? -ne 0 ]; then
-  echo "$PROG: error: cannot ping NFS server: $NFS_SERVER" >&2
+PING_ERROR=
+for NFS_SERVER in ${NFS_SERVERS}
+do
+  ping -c 1 $NFS_SERVER > /dev/null
+  if [ $? -ne 0 ]; then
+    echo "$PROG: warning: cannot ping NFS server: $NFS_SERVER" >&2
+    PING_ERROR=yes
+  fi
+done
+
+if [ -n "$PING_ERROR" ]; then
   if [ -z "$I_CONFIGURED_ETH1" ]; then
     echo "$PROG: please check $ETH1_CFG" >&2
   fi
@@ -567,11 +594,14 @@ if [ -n "$DO_MOUNT" ]; then
 
     # Perform the mount operation
 
+    NFS_EXPORT=`nfs_export $ALLOC`
+    check_ok
+
     if [ -n "$VERBOSE" ]; then
-      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_SERVER:$NFS_PATH/$ALLOC/$ALLOC\" \"$DIR/$ALLOC\""
+      echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_EXPORT\" \"$DIR/$ALLOC\""
     fi
 
-    mount -t nfs -o "$MOUNT_OPTIONS" "$NFS_SERVER:$NFS_PATH/$ALLOC/$ALLOC" "$DIR/$ALLOC"
+    mount -t nfs -o "$MOUNT_OPTIONS" "$NFS_EXPORT" "$DIR/$ALLOC"
     if [ $? -ne 0 ]; then
       if [ -n "$I_CREATED_DIRECTORY" ]; then
         rmdir "$DIR/$ALLOC" # clean up
@@ -641,7 +671,10 @@ check_ok
 
 for ALLOC in "$@"
 do
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_SERVER:$NFS_PATH/$ALLOC/$ALLOC" >> "$DMAP"
+  NFS_EXPORT=`nfs_export $ALLOC`
+  check_ok
+
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$DMAP"
   check_ok
 done
 

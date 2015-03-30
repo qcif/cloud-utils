@@ -7,10 +7,9 @@ Synopsis
 --------
 
     q-storage-setup.sh
-        [ -t | --tier] code
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
-        [ -d | --dir dirname] [ -f | --force pkg]
-        [ -s | --stage name]
+        [ -d | --dir dirname]
+        [ -f | --force yum|apt]
         [ -v | --verbose ] [ -h | --help ] storageID {storageID...}
 
 Description
@@ -21,16 +20,13 @@ of these options:
 
 - `-a | --autofs` configure _autofs_ to automatically mount the storage.
 
-- `-m | --mount` runs the mount command to manually mount the storage.
+- `-m | --mount` runs the _mount_ command to manually mount the storage.
 
-- `-u | --umount` runs the umount command to reverse the action of the mount command.
+- `-u | --umount` runs the _umount_ command to reverse the action of the _mount_ command.
 
 - `-h | --help` shows help information.
 
 Other options are:
-
-- `-t --tier code` sets the storage tier for the storage. This
-is usually a value like "1a", "2a", "2c1", "2c2", etc.
 
 - `-d --dir name` sets the directory containing the mount point. The
 directory must be an absolute directory (i.e. starting with a
@@ -44,20 +40,11 @@ of `/data` is used if this option is not specified.
 manager type. This script has been tested with particular Linux
 distributions that use the "yum" package manager (e.g. CentOS and
 Fedora) and "apt" (e.g. Ubuntu and Debian). It attempts to
-automatically detect if it is running on a tested Linux
-distribution. If the automatic detection fails and/or you want to take
+automatically detect which package manager is being used.
+If the automatic detection fails and/or you want to take
 the risk of running it on an untested distribution, force it to use
 the commands for a particular package manager by using this option
 with `yum` or `apt` as the argument.
-
-- `-s | --stage facility` sets the facility being used. The
-facility must either be "stage1" or "stage2". This option is normally
-not needed, since this script will try to automatically detect which
-stage it is running on (by examining the localhost's IP address).  It
-is only needed if that automatic detection does not work
-properly. Note: both the compute (i.e. the VM instance this script is
-run on) and the storage allocation must be in the same facility. You
-cannot NFS mount storage allocations from a different facility.
 
 - `-v | --verbose` show extra information.
 
@@ -65,7 +52,7 @@ The `storageID` must be one or more storage allocation names. These must be of
 the form "Qnnnn" where _n_ is a digit (except for Q01, Q02, Q03 and
 Q16, which only have two digits).
 
-The first time this script is used, it might take a few minutes to
+**Note:** The first time this script is used, it might take a few minutes to
 run. This is because it needs to download and install the dependent
 packages. Use verbose mode to see an indication of progress as it is
 running.
@@ -120,14 +107,14 @@ can change when GitHub reorganises their service. If the URL does not
 work, go to this project on GitHub and locate the raw link to the
 q-storage-setup.sh file.
 
-### Ad hoc testing
+### Ad hoc mounting and unmounting
 
 Mount storage allocation Q0039, examine its contents and unmount it. Since the
 script reqires root privileges, the _sudo_ command is used.
 
-    $ sudo ./q-storage-setup.sh --mount --tier 2a Q0039
+    $ sudo ./q-storage-setup.sh --mount Q0039
     $ sudo ls /mnt/Q0039
-    $ sudo ./q-storage-setup.sh --umount --tier 2a Q0039
+    $ sudo ./q-storage-setup.sh --umount Q0039
 
 Remember, the first execution of the script might take a few minutes
 to run. This is because it needs to download and install the dependent
@@ -138,7 +125,7 @@ anything out. Add the "--verbose" option to see its progress.
 
 Configure autofs and examine its contents.
 
-    $ sudo ./q-storage-setup.sh --tier 2a Q0039
+    $ sudo ./q-storage-setup.sh Q0039
     $ sudo ls /data/Q0039
 
 
@@ -179,12 +166,14 @@ Files
 Diagnosis
 ---------
 
-### Interface eth1 not found: not running on QRIScloud?
+### eth1 not found: not running on a QRIScloud virtual machine?
 
 QRIScloud storage allocations can only be NFS mounted from virtual
-machine instances running in QRIScloud (i.e. either on the stage 1
-"qld" or stage 2 "QRIScloud" availability zone). The current system is
-not running on the Queensland node.
+machine instances running in QRIScloud (i.e. the
+"QRIScloud" NeCTAR availability zone). The computer
+is not running on in QRIScloud, so it cannot mount any QRIScloud
+storage allocations. Use a virtual machine instance in "QRIScloud"
+and run the script from there.
 
 ### Cannot access /data/Q...: no such file or directory
 
@@ -199,7 +188,7 @@ what error message appears:
 
 The most common cause is the virtual machine instance has not been
 given permission to mount that particular storage allocation. Please
-contact QCIF support.
+contact QRIScloud support.
 
 Try to manually mount the storage (using the `--mount` option) and see
 if there are any error messages.
@@ -251,16 +240,6 @@ configuration files or run the DHCP client:
 
 This script should have automatically set up the second network
 interface, but obviously that failed: please report this as a bug.
-
-### Cannot determine stage
-
-The automatic detection of whether the VM instance is running in
-QRIScloud stage 1 or QRIScloud stage 2 failed.
-
-Before explicitly specifying a stage, check that the VM instance is
-running in QRIScloud. The automatic detection probably failed because
-the VM instance is not running in QRIScloud at all, in which case NFS
-mounting cannot work (even if a stage is explicitly specified).
 
 See also
 --------
