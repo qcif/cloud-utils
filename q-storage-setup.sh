@@ -221,50 +221,38 @@ NFS_PATH=/tier${TIER}
 # Check pre-conditions
 
 if [ -z "$FORCE" ]; then
+
   OS=`uname -s`
   if [ "$OS" != 'Linux' ]; then
-    echo "$PROG: error: unsupported operating system: $OS (use --force?)"
+    echo "$PROG: error: unsupported OS: $OS (use --force yum|apt)"
     exit 1
   fi
 
-  # Determine distribution
+  # Detect package manager
 
-  which lsb_release > /dev/null 2>&1
-  if [ $? -eq 0 ]; then
-    DISTRO=`lsb_release -d -s`
-  elif [ -f '/etc/system-release' ]; then
-    DISTRO=`head -1 /etc/system-release`
-  elif [ -f '/etc/issue' ]; then
-    DISTRO=`head -1 /etc/issue`
-  else
-    DISTRO=unknown
-  fi
-  ASCIID=`echo "$DISTRO" | tr -c ' -~' 'X'`
-  if [ "$DISTRO" = 'CentOS release 6.4 (Final)' -o \
-       "$DISTRO" = 'CentOS release 6.5 (Final)' -o \
-       "$DISTRO" = 'CentOS Linux release 7.0.1406 (Core) ' -o \
-       "$DISTRO" = 'Scientific Linux release 6.4 (Carbon)' -o \
-       "$DISTRO" = 'Scientific Linux release 6.5 (Carbon)' -o \
-       "$ASCIID" = 'Fedora release 19 (SchrXXdingerXXXs Cat)X' -o \
-       "$DISTRO" = 'Fedora release 20 (Heisenbug)' \
-     ]; then
+  if which yum > /dev/null 2>&1; then
     FLAVOUR=yum
-  elif [ "$DISTRO" = 'Ubuntu 12.10' -o \
-         "$DISTRO" = 'Ubuntu 13.04' -o \
-         "$DISTRO" = 'Ubuntu 13.10' -o \
-         "$DISTRO" = 'Ubuntu 14.04 LTS' -o \
-         "$DISTRO" = 'Debian GNU/Linux 6.0.8 (squeeze)' -o \
-         "$DISTRO" = 'Debian GNU/Linux 7.4 (wheezy)' \
-      ]; then
+  fi
+
+  if which apt-get > /dev/null 2>&1; then
+    if [ -n "$FLAVOUR" ]; then
+      echo "$PROG: error: detected yum and apt-get (use --force yum|apt)" >&2
+      exit 1
+    fi
     FLAVOUR=apt
-  else
-    echo "$PROG: error: unsupported distribution: \"$DISTRO\" (use --force yum|apt)"
+  fi
+
+  if [ -z "$FLAVOUR" ]; then
+    echo "$PROG: error: package manager not found (use --force yum|apt)"
     exit 1
   fi
+
 else
+  # Use package manager specifed by --force
+
   FLAVOUR="$FORCE"
   if [ "$FLAVOUR" != 'yum' -a "$FLAVOUR" != 'apt' ]; then
-    echo "$PROG: error: unsupported flavour (expecting \"yum\" or \"apt\"): $FLAVOUR" >&2
+    echo "$PROG: error: unsupported package manager (expecting \"yum\" or \"apt\"): $FLAVOUR" >&2
     exit 2
   fi
 fi
