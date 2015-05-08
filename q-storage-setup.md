@@ -15,6 +15,13 @@ Synopsis
 Description
 -----------
 
+This script simplifies the task of setting up _autofs_ or directly
+mounting/unmounting storage allocations.  It also automatically
+detects which NFS server the particular storageID allocation is
+exported from, so the user does not need to be concerned about those
+details. All the user needs to know is the storageID (Qnnnn) of the
+allocation, and to have the permission to mount that allocation.
+
 This script operates in one of four modes. The mode is set by using one
 of these options:
 
@@ -60,8 +67,10 @@ running.
 ### Configure autofs mode
 
 This mode configures _autofs_ to NFS mount the specified storage. Use
-this mode to setup the storage for production use.  The mounts will be
-re-established if the operating system is rebooted.
+this mode to setup the storage for production use.  The _autofs_
+mounts will be re-established if the operating system is rebooted. As
+with normal _autofs_ behaviour, the mounts will be established when an
+attempt is made to access it.
 
 If necessary, it also installs the necessary packages and configures the
 private network interface. Groups and users are also created.
@@ -70,6 +79,11 @@ It is recommended that the mounting is tested using the ad hoc mount
 mode (see below) before setting up _autofs_. Errors are easier to
 detect in mount mode, because _autofs_ silently fails if errors are
 encountered.
+
+Note: previous autofs configurations created by this script will be
+deleted and replaced with a new configuration. To keep existing
+storageIDs, provide as arguments the current storageIDs as well as the
+new ones: the script accepts multiple storageID arguments.
 
 ### Mount mode
 
