@@ -3,7 +3,7 @@
 # Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
 # instances.
 #
-# Copyright (C) 2013, Queensland Cyber Infrastructure Foundation Ltd.
+# Copyright (C) 2013, 2016, Queensland Cyber Infrastructure Foundation Ltd.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -105,7 +105,7 @@ FORCE=
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,unmount,force:,verbose --options hd:amuf:v -- "$@"`
+  ARGS=`getopt --name "$PROG" --long help,dir:,autofs,mount,umount,force:,verbose --options hd:amuf:v -- "$@"`
 else
   # Original getopt is available (no long option names nor whitespace)
   ARGS=`getopt hd:amuf:v "$@"`
@@ -653,11 +653,6 @@ fi
 #----------------------------------------------------------------
 # Configure autofs automounter
 
-# Stopping autofs service
-
-service autofs stop
-check_ok
-
 # Create direct map file
 
 DMAP=/etc/auto.qriscloud
@@ -666,7 +661,9 @@ if [ -n "$VERBOSE" ]; then
   echo "$PROG: creating direct map file for autofs: $DMAP"
 fi
 
-echo "# autofs mounts for storage" > "$DMAP"
+TMP="$DMAP".$$
+
+echo "# autofs mounts for storage" > "$TMP"
 check_ok
 
 for ALLOC in "$@"
@@ -674,9 +671,12 @@ do
   NFS_EXPORT=`nfs_export $ALLOC`
   check_ok
 
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$DMAP"
+  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
   check_ok
 done
+
+mv "$TMP" "$DMAP"
+check_ok
 
 # Modify master map file
 
@@ -691,9 +691,9 @@ if [ $? -ne 0 ]; then
   check_ok
 fi
 
-# Starting autofs service (so it picks up the new configuration)
+# Restart autofs service (so it uses the new configuration)
 
-service autofs start
+service autofs restart
 check_ok
 
 #----------------------------------------------------------------

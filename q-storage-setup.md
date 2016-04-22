@@ -15,6 +15,9 @@ Synopsis
 Description
 -----------
 
+Don't want to read all this (even though you really should)? Then jump
+straight to the "Examples" section below.
+
 This script simplifies the task of setting up _autofs_ or directly
 mounting/unmounting storage allocations.  It also automatically
 detects which NFS server the particular storageID allocation is
@@ -26,6 +29,7 @@ This script operates in one of four modes. The mode is set by using one
 of these options:
 
 - `-a | --autofs` configure _autofs_ to automatically mount the storage.
+  This is the default if none of the other mode options are specified.
 
 - `-m | --mount` runs the _mount_ command to manually mount the storage.
 
@@ -57,7 +61,7 @@ with `yum` or `apt` as the argument.
 
 The `storageID` must be one or more storage allocation names. These must be of
 the form "Qnnnn" where _n_ is a digit (except for Q01, Q02, Q03 and
-Q16, which only have two digits).
+Q16, which only have two digits... for historical reasons).
 
 **Note:** The first time this script is used, it might take a few minutes to
 run. This is because it needs to download and install the dependent
@@ -123,6 +127,13 @@ q-storage-setup.sh file.
 
 ### Ad hoc mounting and unmounting
 
+Perform an _ad hoc_ mount before trying to setup autofs. Don't be
+tempted to skip this step, because if there is something wrong
+(e.g. the allocation is not being properly exported) this should print
+out an error message. The autofs does not print out any error
+messages, so if something is wrong it will simply not work with no
+indication of why it is not working.
+
 Mount storage allocation Q0039, examine its contents and unmount it. Since the
 script reqires root privileges, the _sudo_ command is used.
 
@@ -133,15 +144,30 @@ script reqires root privileges, the _sudo_ command is used.
 Remember, the first execution of the script might take a few minutes
 to run. This is because it needs to download and install the dependent
 packages. Don't panic if it runs for a few minutes without printing
-anything out. Add the "--verbose" option to see its progress.
+anything out. Add the "--verbose" option to see its progress (or if
+a blank screen makes you nervious).
+
+The _ls_ command is to check if the mount worked. It needs to be run
+with _sudo_ because the directory is owned by the user created for
+that allocation (the "q39" user in this example).
+
+Remove the _ad hoc_ mount with the `--umount` option. Note: following
+Unix tradition, it is called "umount" and not "unmount".
 
 ### Configure autofs
 
-Configure autofs and examine its contents.
+This is how to setup autofs:
 
     $ sudo ./q-storage-setup.sh Q0039
+
+Check if it is working by examining the mounted storage:
+
     $ sudo ls /data/Q0039
 
+As an autofs mount, this will be available if the machine is
+rebooted. It might get automatically unmounted if it has not been used
+for a while, so don't be surprised if it does not appear under
+"/data". But it will automatically get re-mounted when it is accessed.
 
 Environment
 -----------
