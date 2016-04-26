@@ -345,6 +345,21 @@ configuration files or run the DHCP client:
 This script should have automatically set up the second network
 interface, but obviously that failed: please report this as a bug.
 
+### warning: NetworkManager installed, consider uninstalling it
+
+NetworkManager is a daemon that dynamically configures the network
+interfaces.  It is useful for environments where the network
+configuration changes (e.g. wi-fi networks that comes and goes), but
+not so useful for staic environments (such as NeCTAR VM instances). In
+the past, NetworkManager has been the cause of seemingly-random
+network changes, which breaks the network connectivity of the VM.
+Consider uninstalling NetworkManager, if you don't need it.
+
+    sudo rpm -e NetworkManager
+
+If you experience problems with the network connections, treat
+NetworkManager as your primary suspect!
+
 See also
 --------
 

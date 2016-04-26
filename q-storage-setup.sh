@@ -464,6 +464,14 @@ if [ -n "$PING_ERROR" ]; then
   exit 1
 fi
 
+# Check for NetworkManager
+
+if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
+  if rpm -q NetworkManager >/dev/null; then
+    echo "$PROG: warning: NetworkManager installed, consider uninstalling it" >&2
+  fi
+fi
+
 #----------------------------------------------------------------
 # Install NFS client
 
