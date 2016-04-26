@@ -1,7 +1,7 @@
 q-storage-setup
 ===============
 
-Setup a QRIScloud virtual machine instance to NFS mount QRIScloud storage.
+Setup a QRIScloud virtual machine instance to NFS mount a QRISdata Collection Storage allocation.
 
 Synopsis
 --------
@@ -15,15 +15,16 @@ Synopsis
 Description
 -----------
 
-Don't want to read all this (even though you really should)? Then jump
-straight to the "Examples" section below.
+_Don't want to read all this (even though you really should)? Then jump
+straight to the "Examples" section below._
 
-This script simplifies the task of setting up _autofs_ or directly
-mounting/unmounting storage allocations.  It also automatically
-detects which NFS server the particular storageID allocation is
-exported from, so the user does not need to be concerned about those
-details. All the user needs to know is the storageID (Qnnnn) of the
-allocation, and to have the permission to mount that allocation.
+This script simplifies the task of setting up _autofs_, or directly
+mounting/unmounting, QRISdata Collection Storage allocations.  It
+also automatically detects which NFS server the particular storageID
+allocation is exported from, so the user does not need to be concerned
+about those details. All the user needs to know is the storageID
+(Qnnnn) of the allocation, and to have the permission to mount that
+allocation.
 
 This script operates in one of four modes. The mode is set by using one
 of these options:
@@ -49,13 +50,13 @@ of `/data` is used if this option is not specified.
 
 - `-f | --force pkg` forces use of commands for the given package
 manager type. This script has been tested with particular Linux
-distributions that use the "yum" package manager (e.g. CentOS and
-Fedora) and "apt" (e.g. Ubuntu and Debian). It attempts to
-automatically detect which package manager is being used.
-If the automatic detection fails and/or you want to take
-the risk of running it on an untested distribution, force it to use
-the commands for a particular package manager by using this option
-with `yum` or `apt` as the argument.
+distributions that use the "apt" (e.g. Ubuntu and Debian), "dnf" or
+"yum" package managers (e.g. CentOS and Fedora). It attempts to
+automatically detect which package manager is being used.  If the
+automatic detection fails and/or you want to take the risk of running
+it on an untested distribution, force it to use the commands for a
+particular package manager by using this option with `apt`, `dnf` or
+`yum` as the argument.
 
 - `-v | --verbose` show extra information.
 
@@ -95,6 +96,9 @@ This mode runs an _ad hoc_ mount command to NFS mount the specified
 storage. Use this mode to test whether storage can be successfully
 mounted.
 
+An _ad hoc_ mount does not survive reboots. Only use it for testing,
+before using _autofs_ to create mounts that will survive reboots.
+
 If necessary, it also installs the necessary packages and configures the
 private network interface. Groups and users are also created.
 
@@ -120,22 +124,29 @@ to download it directly from GitHub:
     $ curl -O https://raw.githubusercontent.com/qcif/cloud-utils/master/q-storage-setup.sh
     $ chmod a+x q-storage-setup.sh
 
-Note: the URL being downloaded is the _raw_ file from GitHub, which
-can change when GitHub reorganises their service. If the URL does not
-work, go to this project on GitHub and locate the raw link to the
-q-storage-setup.sh file.
+The URL being downloaded is the _raw_ file from GitHub, which can
+change when GitHub reorganises their service. If the URL does not
+work, go to [this project](https://github.com/qcif/cloud-utils) on
+GitHub and locate the raw link to the _q-storage-setup.sh_ file.
+
+**Note:** The first time this script is run, it can take a few minutes
+to run. This is because it is downloading and installing the
+NFS/autofs packages it requires. Please be patient.
 
 ### Ad hoc mounting and unmounting
 
-Perform an _ad hoc_ mount before trying to setup autofs. Don't be
-tempted to skip this step, because if there is something wrong
-(e.g. the allocation is not being properly exported) this should print
-out an error message. The autofs does not print out any error
-messages, so if something is wrong it will simply not work with no
-indication of why it is not working.
+Perform an _ad hoc_ mount before trying to setup autofs.
 
-Mount storage allocation Q0039, examine its contents and unmount it. Since the
-script reqires root privileges, the _sudo_ command is used.
+This step is optional, but recommended because if there is something
+wrong (e.g. the allocation is not being properly exported) this should
+print out an error message. The _autofs_ does not print out any error
+messages, so if something is wrong _autofs_ will simply not work with
+no indication of why it is not working.
+
+Mount storage allocation, examine its contents and unmount it. Since
+the script reqires root privileges, the _sudo_ command is used. This
+example uses Q0039: change it to your allocation (otherwise it
+definitely won't work).
 
     $ sudo ./q-storage-setup.sh --mount Q0039
     $ sudo ls /mnt/Q0039
@@ -184,18 +195,17 @@ Supported distributions
 This script has been tested on the following distributions (as
 installed from the NeCTAR official images):
 
-- CentOS 6.4 x86_64
-- CentOS 6.5 x86_64
+- CentOS 6.7 x86_64
 - CentOS 7.0 x86_64
-- Fedora 19 x86_64
-- Fedora 20 x86_64
-- Scientific Linux 6.4 x86_64
-- Scientific Linux 6.5 x86_64
-- Ubuntu 12.10 (Quantal) amd64
-- Ubuntu 13.10 (Saucy) amd64
-- Ubuntu 14.04 (Trusty) amd64
-- Debian 6 x86_64 (Squeeze)
-- Debian 7 x86_64 (Wheezy)
+- Debian 8 x86_64 (Jessie)
+- Fedora 22 x86_64
+- Fedora 23 x86_64
+- Scientific Linux 6.7 x86_64 (Carbon)
+- Ubuntu 15.10 (Wily) amd64
+- Ubuntu 16.04 (Xenial) amd64
+
+It should also work with NeCTAR images for previous versions of these
+distributions too.
 
 Files
 -----
@@ -208,38 +218,83 @@ Diagnosis
 
 ### eth1 not found: not running on a QRIScloud virtual machine?
 
-QRIScloud storage allocations can only be NFS mounted from virtual
-machine instances running in QRIScloud (i.e. the
-"QRIScloud" NeCTAR availability zone). The computer
-is not running on in QRIScloud, so it cannot mount any QRIScloud
-storage allocations. Use a virtual machine instance in "QRIScloud"
-and run the script from there.
+QRISdata Collection Storage allocations can only be NFS mounted from
+virtual machine instances running in QRIScloud (i.e. the "QRIScloud"
+NeCTAR availability zone).
+
+The virtual machine is not running in QRIScloud, so it cannot mount
+any QRISdata Collection Storage allocations. Use a virtual machine
+instance in "QRIScloud" and run the script from there.
+
+### error: autofs mount failed
+
+The autofs was configured, but the mount does not work.
+
+Try _ad hoc_ mounting the storage (i.e. without using autofs), and see
+what error message appears:
+
+    ./q-storage-setup.sh --mount Q...
+
+The most common cause is the virtual machine instance has not been
+given permission to mount that particular storage allocation. If that
+is the case, see "mount.nfs: access denied by server while
+mounting..." below.
+
+Alternatively, use the logging feature of _autofs_:
+
+1. Add `OPTIONS="--debug"` to the _/etc/sysconfig/autofs_ file.
+2. Restart _autofs_.
+3. Attempt to access the mounted directory (e.g. ls /data/Q....).
+4. Examine the logs.
+
+On a system that uses _init.d_:
+
+    sudoedit /etc/sysconfig/autofs
+    sudo service autofs restart
+    sudo ls /data/Q????
+    less /var/log/messages
+
+On a system that uses _systemd_:
+
+    sudoedit /etc/sysconfig/autofs
+    sudo systemctl restart autofs.service
+    sudo ls /data/Q????
+    sudo journalctl -u autofs
+
+Afterwards, remove the debug option.
 
 ### Cannot access /data/Q...: no such file or directory
 
-Encountered when trying to access the autofs mounted directory.
+Encountered when trying to access the autofs mounted directory, even
+though the directory appears listed under "/data".
 
 Try ad hoc mounting the storage (i.e. without using autofs), and see
 what error message appears:
 
     ./q-storage-setup.sh --mount Q...
 
+The most common cause is the virtual machine instance has not been
+given permission to NFS mount that particular storage allocation.  If
+that is the case, see "mount.nfs: access denied by server while
+mounting..." below.
+
 ### mount.nfs: access denied by server while mounting...
 
-The most common cause is the virtual machine instance has not been
-given permission to mount that particular storage allocation. Please
-contact QRIScloud support.
+This error is printed out when performing an _ad hoc_ mount and the
+virtual machine instance does not have permission to mount the
+particular storage allocation.
 
-Try to manually mount the storage (using the `--mount` option) and see
-if there are any error messages.
+First, check the allocation storageID is correct; and the virtual
+machine is running in the correct NeCTAR project.
 
-Alternatively add `OPTIONS="--debug"` to the _/etc/sysconfig/autofs_
-file, restart _autofs_ (`sudo service autofs restart`), attempt to
-access the mounted directory and then examine _/var/log/messages_.
+Secondly, if the VM instance was instantiated less than 5 minutes ago,
+the permissions might not have been applied to it. Wait up to 5
+minutes and try again.
 
-If the VM instance was instantiated less than 5 minutes ago, the
-permissions might not have been applied to it. Wait up to 5 minutes
-and try again.
+If it still doesn't work, please contact QRIScloud support.  If you
+can, please identify the support ticket where you asked for NFS
+mounting permissions to be setup for that NeCTAR project and storage
+allocation.
 
 ### Package 'nfs-common' has no installation candidate
 
@@ -255,15 +310,24 @@ This error occurs on the Fedora images.
 Just re-run the script a second time, with the same parameters, and it
 should work.
 
-### DHCP did not set eth1 MTU to 9000 bytes
+### warning: MTU for eth1 is not 9000 bytes
 
-The network interface did not set the MTU size from the information
-provided by the DHCP server. This occurs on the Fedora images.
+The Maximum Transmission Unit (MTU) for the network interface is not
+set to 9000.  This problem usually occurs on Fedora images, which
+don't seem to be setup to use the MTU information provided by DHCP.
+
+The NFS mount will still work, but it will not work as fast as it could
+if the MTU was set to 9000 (a.k.a. "jombo frames").
 
 Explicitly set it by editing the network interface configuration file
 (for RHEL systems, edit _/etc/sysconfig/network-scripts/ifcfg-eth1_;
-for ubuntu systems, edit _/etc/network/interfaces_) and restart the
-interface (`ifdown eth1; ifup eth1`).
+for ubuntu systems, edit _/etc/network/interfaces_) and then restart
+the interface for the changes to take effect (`ifdown eth1; ifup
+eth1`).
+
+Show the MTU for eth1:
+
+    ip link show dev eth1
 
 ### Cannot ping NFS server
 
