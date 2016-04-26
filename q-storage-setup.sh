@@ -252,28 +252,19 @@ do
     ERROR=1
     continue
   fi
-  # Check correct number of leading zeros
-  if [ "$NUM" -eq 1 -o \
-       "$NUM" -eq 2 -o \
-       "$NUM" -eq 3 -o \
-       "$NUM" -eq 16 ]; then
-    # These numbers are the exception and needs to be Qnn
-    if ! echo $ALLOC | grep -q '^Q[0-9][0-9]$'; then
-      echo "Usage error: storageID name should be Qnn: $ALLOC" >&2
-      ERROR=1
-      continue
-    fi
-  elif [ "$NUM" -gt 999 ]; then
+
+  if [ "$NUM" -gt 999 ]; then
     # This will cause UID/GID to violate the 54nnn pattern and
     # the behaviour is not yet defined.
     echo "$PROG: internal error: allocations over 999 not supported" >&2
     exit 3
-  else
-    # These numbers follow the standard pattern of Qnnnn
-    if ! echo $ALLOC | grep -q '^Q[0-9][0-9][0-9][0-9]$'; then
-      echo "Usage error: storageID name should be Qnnnn: $ALLOC" >&2
-      ERROR=1
-    fi
+  fi
+
+  # Check correct number of leading zeros
+  # These numbers follow the standard pattern of Qnnnn
+  if ! echo $ALLOC | grep -q '^Q[0-9][0-9][0-9][0-9]$'; then
+    echo "Usage error: storageID name should be Qnnnn: $ALLOC" >&2
+    ERROR=1
   fi
 done
 if [ -n "$ERROR" ]; then
