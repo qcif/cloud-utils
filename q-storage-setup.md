@@ -128,6 +128,9 @@ change when GitHub reorganises their service. If the URL does not
 work, go to [this project](https://github.com/qcif/cloud-utils) on
 GitHub and locate the raw link to the _q-storage-setup.sh_ file.
 
+The "-O" (capital-o) option tells _curl_ to save the response to a file
+with the same name as the remote file.
+
 **Note:** The first time this script is run, it can take a few minutes
 to run. This is because it is downloading and installing the
 NFS/autofs packages it requires. Please be patient.
@@ -138,9 +141,10 @@ Perform an _ad hoc_ mount before trying to setup autofs.
 
 This step is optional, but recommended because if there is something
 wrong (e.g. the allocation is not being properly exported) this should
-print out an error message. The _autofs_ does not print out any error
-messages, so if something is wrong _autofs_ will simply not work with
-no indication of why it is not working.
+print out an error message. The _ad hoc_ mount is different from the
+_autofs_ mount, because by default _autofs_ does not print out any
+error messages: so if something is wrong _autofs_ will simply not work
+with no indication of why it is not working.
 
 Mount storage allocation, examine its contents and unmount it. Since
 the script reqires root privileges, the _sudo_ command is used. This

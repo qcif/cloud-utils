@@ -101,6 +101,7 @@ nfs_export () {
       echo "  * Failed servers:$SHOWMOUNT_FAIL" >&2
       echo "  * Please contact QRIScloud Support and tell them q-storage-setup.sh was run" >&2
       echo "  * and provide them a copy of all the error messages shown above." >&2
+      echo "  * It is possible either the NFS mounts and/or showmount is not working." >&2
     else
       echo "$PROG: error: could not find NFS server and export for $ALLOC" >&2
       echo "  Please check the allocation number is correct: $ALLOC" >&2
