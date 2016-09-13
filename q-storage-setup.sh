@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=2.1
+VERSION=3.0.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -47,19 +47,48 @@ trap "echo $PROG: command failed: aborted; exit 3" ERR # abort if command fails
 set -u # fail on attempts to expand undefined variables
 
 #----------------------------------------------------------------
+# Functions
+
 # Function to determine NFS servers and export directory for an allocation
+# using the QRIScloud Portal API.
+#
+# Returns both the server and export path as a single string
+# (e.g. "10.255.120.200:/tier2d1/Q0039/Q0039").
+
+nfs_export_from_portal() {
+  ALLOC=$1
+  NUM=`echo $ALLOC | sed s/Q0*//`
+
+  VALUE=`curl --silent --user-agent "q-storage-setup" -H "Accept: text/plain"  https://services.qriscloud.org.au/collectionStorage/allocation/${NUM}/nfs-path`
+  if [ $? -ne 0 ]; then
+    return;
+  fi
+
+  if ! echo "$VALUE" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\:\/[0-9A-Za-z]+\/Q[0-9]{4}\/Q[0-9]{4}$'; then  
+    return
+  fi
+
+  echo $VALUE # success
+}
+
+# Function to determine NFS servers and export directory for an allocation
+# using the showmount command.
 #
 # Returns both the server and export path as a single string
 # (e.g. "10.255.120.200:/tier2d1/Q0039/Q0039").
 #
 # Note: this must be done after installing the NFS utilities,
 # otherwise the `showmount` command might not be installed.
+#
+# The showmount command is not always reliable (e.g. due to load on the
+# server), so this may return a blank result even though the mount exists.
 
-nfs_export () {
+nfs_export_from_showmount () {
   ALLOC=$1
 
   if ! which showmount >/dev/null 2>&1; then
     echo "$PROG: error: command not found: showmount" >&2
+    # This function was called before showmount was installed.
     exit 1
   fi
 
@@ -77,39 +106,22 @@ nfs_export () {
 
       if [ -n "$RESULT" -o "$NUM_MATCHES" -ne 1 ]; then
         # Matches from another NFS server or multiple matches were found
-	echo "$PROG: error: $ALLOC has multiple NFS exports" >&2
-	echo "$PROG: Please contact QRIScloud support to report this." >&2
-	exit 1
+       echo "$PROG: error: $ALLOC has multiple NFS exports" >&2
+       echo "  Please contact QRIScloud Support to report this." >&2
+       exit 1
       fi
 
       RESULT="$NFS_SERVER:$MATCH"
     fi
   done
 
-  if [ -z "$RESULT" ]; then
-    # Mount not found.
+  echo $RESULT # could be blank if match not found
+}
 
-    SHOWMOUNT_FAIL=
-    for NFS_SERVER in ${NFS_SERVERS}; do
-      if ! showmount -e "$NFS_SERVER" >/dev/null 2>&1; then
-        SHOWMOUNT_FAIL="$SHOWMOUNT_FAIL $NFS_SERVER"
-      fi
-    done
+# Function to convert an NFS export path to an allocation Q-number.
 
-    if [ -n "$SHOWMOUNT_FAIL" ]; then
-      echo "$PROG: error: could not run showmount against some/all servers" >&2
-      echo "  * Failed servers:$SHOWMOUNT_FAIL" >&2
-      echo "  * Please contact QRIScloud Support and tell them q-storage-setup.sh was run" >&2
-      echo "  * and provide them a copy of all the error messages shown above." >&2
-      echo "  * It is possible either the NFS mounts and/or showmount is not working." >&2
-    else
-      echo "$PROG: error: could not find NFS server and export for $ALLOC" >&2
-      echo "  Please check the allocation number is correct: $ALLOC" >&2
-    fi
-    exit 1
-  fi
-
-  echo $RESULT
+alloc_from_nfs_path () {
+  echo $1 | sed -E 's/^.+\///'
 }
 
 #----------------------------------------------------------------
@@ -125,10 +137,18 @@ FORCE=
 
 ## Define options: trailing colon means has an argument
 
-SHORT_OPTS=hd:amuf:v
-LONG_OPTS=help,dir:,autofs,mount,umount,force:,verbose
+SHORT_OPTS=hd:amuf:vV
+LONG_OPTS=help,dir:,autofs,mount,umount,force:,verbose,version
 
-SHORT_HELP="Usage: $PROG [options] arguments
+ALLOC_SPEC_HELP="
+allocSpec = the QRISdata Collection Storage allocation to mount/unmount.
+This can either be a Q-number (e.g. \"Q0039\") or an export path.
+An export path is a string that contains the NFS server and path;
+it looks something like \"10.255.120.200:/tier2d1/Q0039/Q0039\".
+The export path can be obtained from the QRIScloud Services Portal:
+  https://services.qriscloud.org.au/"
+
+SHORT_HELP="Usage: $PROG [options] allocSpecs...
 Options:
   -a      configure and use autofs (default)
   -m      perform ad hoc mount
@@ -140,9 +160,12 @@ Options:
   -f pkg  set package manager type (\"apt\", \"dnf\" or \"yum\" )
 
   -v      show extra information
-  -h      show this message"
+  -V      show version
+  -h      show this message
+$ALLOC_SPEC_HELP
+"
 
-LONG_HELP="Usage: $PROG [options] storageIDs...
+LONG_HELP="Usage: $PROG [options] allocSpecs...
 Options:
   -a | --autofs     configure and use autofs (default)
   -m | --mount      perform ad hoc mount
@@ -154,7 +177,10 @@ Options:
   -f | --force pkg  set package manager type (\"apt\", \"dnf\" or \"yum\")
 
   -v | --verbose    show extra information
-  -h | --help       show this message"
+  -V | --version    show version
+  -h | --help       show this message
+$ALLOC_SPEC_HELP
+"
 
 # Detect if GNU Enhanced getopt is available
 
@@ -194,6 +220,7 @@ while [ $# -gt 0 ]; do
         -u | --umount)   DO_UMOUNT=yes;;
         -d | --dir)      DIR="$2"; shift;;
         -f | --force)    FORCE="$2"; shift;;
+        -V | --version)  echo "$PROG $VERSION"; exit 0;;
         -v | --verbose)  VERBOSE=yes;;
 
         -h | --help)     if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]
@@ -247,45 +274,75 @@ if ! echo "$DIR" | grep -q '^\/'; then
 fi
 
 if [ $# -lt 1 ]; then
-  echo "$PROG: usage error: missing storageID(s) (use -h for help)" >&2
+  echo "$PROG: usage error: missing allocSpec(s) (use -h for help)" >&2
   exit 2
 fi
 
-# Check storageID names are correctly formatted
+# Check syntax of allocation specifiers
 
 ERROR=
-for ALLOC in "$@"
-do
-  # Check syntax: is it "Q" followed by one or more digits
-  if ! echo $ALLOC | grep -q '^Q[0-9][0-9]*$'; then
-    echo "Usage error: bad storageID name (expecting Qnnnn or Qnn): $ALLOC" >&2
-    ERROR=1
-    continue
-  fi
-  # Extract NUM as the number part (without leading zeros)
-  NUM=`echo $ALLOC | sed s/Q0*//`
-  # Special check for Q0, Q00, Q000, etc. which slips through the above check
-  if ! echo $NUM | grep -q '^[0-9][0-9]*$'; then
-    echo "Usage error: bad storageID name: zero is not valid: $ALLOC" >&2
+for ALLOC_SPEC in "$@"; do
+  if echo $ALLOC_SPEC | grep -q '^Q[0-9][0-9]*$'; then
+    # Q-number
+
+    QNUM=$ALLOC_SPEC
+
+  elif echo "$ALLOC_SPEC" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\:\/[0-9A-Za-z]+\/Q[0-9]{4}\/Q[0-9]{4}$'; then
+    # Export path (nnn.nnn.nnn.nnn:/xxx/Qnnn/Qnnn)
+
+    SERVER=`echo "$ALLOC_SPEC" | sed -E s/:.*//`
+    SERVER_KNOWN=
+    for NFS_SERVER in ${NFS_SERVERS}; do
+      if [ "$NFS_SERVER" = "$SERVER" ]; then
+        SERVER_KNOWN=1
+      fi
+    done
+    if [ -z "$SERVER_KNOWN" ]; then
+      echo "$PROG: error: unsupported server IP address: $SERVER" >&2
+      echo "  Please check NFS export path is correct: $ALLOC_SPEC" >&2
+      ERROR=1
+      continue
+    fi
+
+    QNUM=`alloc_from_nfs_path $ALLOC_SPEC`
+
+  else
+    # Neither Q-number or export path
+    echo "Usage error: bad allocation (expecting Qnnnn or n.n.n.n://.../Qnnnn/Qnnnn): $ALLOC_SPEC" >&2
     ERROR=1
     continue
   fi
 
+  # Common checks on QNUM
+
+  # Check correct number of leading zeros
+  if ! echo "$QNUM" | grep -q '^Q[0-9][0-9][0-9][0-9]$'; then
+    echo "Usage error: Q-number must have exactly four digits: $ALLOC_SPEC" >&2
+    ERROR=1
+    continue
+  fi
+
+  # Extract NUM as the number part (without leading zeros)
+  NUM=`echo $QNUM | sed s/Q0*//`
+
+  # Special check for Q0, Q00, Q000, etc. which slips through the above check
+  if ! echo $NUM | grep -q '^[0-9][0-9]*$'; then
+    echo "Usage error: bad Q-number: zero is not valid: $ALLOC_SPEC" >&2
+    ERROR=1
+    continue
+  fi
+ 
   if [ "$NUM" -gt 999 ]; then
     # This will cause UID/GID to violate the 54nnn pattern and
     # the behaviour is not yet defined.
-    echo "$PROG: internal error: allocations over 999 not supported" >&2
-    exit 3
+    echo "$PROG: error: allocations over 999 not supported: $ALLOC_SPEC" >&2
+    ERROR=1
+    continue
   fi
 
-  # Check correct number of leading zeros
-  # These numbers follow the standard pattern of Qnnnn
-  if ! echo $ALLOC | grep -q '^Q[0-9][0-9][0-9][0-9]$'; then
-    echo "Usage error: storageID name should be Qnnnn: $ALLOC" >&2
-    ERROR=1
-  fi
 done
 if [ -n "$ERROR" ]; then
+  # At least one of the allocation specifications was wrong: abort
   exit 2
 fi
 
@@ -458,8 +515,7 @@ fi
 # Check NFS servers are accessible
 
 PING_ERROR=
-for NFS_SERVER in ${NFS_SERVERS}
-do
+for NFS_SERVER in ${NFS_SERVERS}; do
   if ! ping -c 1 $NFS_SERVER > /dev/null 2>&1; then
     echo "$PROG: warning: cannot ping NFS server: $NFS_SERVER" >&2
     PING_ERROR=yes
@@ -476,8 +532,10 @@ fi
 # Check for NetworkManager
 
 if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
-  if rpm -q NetworkManager >/dev/null; then
-    echo "$PROG: warning: NetworkManager installed, consider uninstalling it" >&2
+  if [ -n "$VERBOSE" ]; then
+    if rpm -q NetworkManager >/dev/null; then
+      echo "$PROG: warning: NetworkManager installed, consider uninstalling it" >&2
+    fi
   fi
 fi
 
@@ -514,6 +572,51 @@ else
 fi
 
 #----------------------------------------------------------------
+# Convert allocation specifier arguments into export paths
+
+EXPORT_PATHS=
+for ALLOC_SPEC in "$@"; do
+  VALUE=
+
+  if echo $ALLOC_SPEC | grep -q '^Q[0-9][0-9]*$'; then
+    # Argument is a Q-number: lookup
+
+    # Try using the QRIScloud Services Portal first
+    VALUE=`nfs_export_from_portal $ALLOC_SPEC`
+
+    if [ -z "$VALUE" ]; then
+      # Resort to using showmount
+      VALUE=`nfs_export_from_showmount $ALLOC_SPEC`
+    fi
+
+    if [ -z "$VALUE" ]; then
+      # Neither worked
+      echo "$PROG: error: could not automatically get export path for $ALLOC_SPEC" >&2
+      echo "  Instead, provide the full NFS export path (from the QRIScloud Services Portal" >&2
+      echo "  at https://services.qriscloud.org.au), or contact QRIScloud support." >&2
+      exit 1
+    fi
+
+  else
+    # Argument is already an export path
+    VALUE="$ALLOC_SPEC"
+  fi
+
+  # Double check value ends in Qnnnn, because rest of script expects it
+
+  if ! echo "$VALUE" | grep -q -E '\/Q[0-9]{4}$'; then
+    echo "$PROG: internal error: unexpected export path syntax: $VALUE" >&2
+    echo "  Please report this to QRIScloud Support." >&2
+    # The portal API or showmount returned an unexpected value.
+    exit 1
+  fi
+
+  # Append to list
+
+  EXPORT_PATHS="${EXPORT_PATHS} ${VALUE}"
+done
+
+#----------------------------------------------------------------
 # Perform desired action. Overview of the remaining code:
 #
 # if (umount) {
@@ -533,8 +636,10 @@ fi
 
 if [ -n "$DO_UMOUNT" ]; then
   ERROR=
-  for ALLOC in "$@"
-  do
+  for NFS_EXPORT in $EXPORT_PATHS; do
+
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+
     if [ -d "$DIR/$ALLOC" ]; then
 
       # Attempt to unmount it
@@ -582,9 +687,11 @@ if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
             --no-create-home --shell /sbin/nologin apache
   fi
 
-  for ALLOC in "$@"
-  do
+  for NFS_EXPORT in $EXPORT_PATHS; do
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+
     NUM=`echo $ALLOC | sed s/Q0*//`
+
     # Note: admin user was 55931, but users now changed to 540xx
     ID_NUMBER=`expr 54000 + $NUM`
 
@@ -609,8 +716,9 @@ elif [ "$FLAVOUR" = 'apt' ]; then
             "apache"
   fi
 
-  for ALLOC in "$@"
-  do
+  for NFS_EXPORT in $EXPORT_PATHS; do
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+
     NUM=`echo $ALLOC | sed s/Q0*//`
     ID_NUMBER=`expr 54000 + $NUM`
 
@@ -634,8 +742,9 @@ if [ -n "$DO_MOUNT" ]; then
 
   ERROR=
 
-  for ALLOC in "$@"
-  do
+  for NFS_EXPORT in $EXPORT_PATHS; do
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+
     # Create individual mount directory
 
     I_CREATED_DIRECTORY=
@@ -655,8 +764,6 @@ if [ -n "$DO_MOUNT" ]; then
     fi
 
     # Perform the mount operation
-
-    NFS_EXPORT=`nfs_export $ALLOC`
 
     if [ -n "$VERBOSE" ]; then
       echo "mount -t nfs -o \"$MOUNT_OPTIONS\" \"$NFS_EXPORT\" \"$DIR/$ALLOC\""
@@ -736,9 +843,8 @@ trap "rm -f "$TMP"; echo $PROG: command failed: aborted; exit 3" ERR
 
 echo "# autofs mounts for storage" > "$TMP"
 
-for ALLOC in "$@"
-do
-  NFS_EXPORT=`nfs_export $ALLOC`
+for NFS_EXPORT in $EXPORT_PATHS; do
+  ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
 
   echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
 done
@@ -770,14 +876,19 @@ fi
 # Check mounts work
 
 ERROR=
-for ALLOC in "$@"
-do
-    if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
-	echo "$PROG: error: autofs mount failed: $DIR/$ALLOC" >&2
-	ERROR=yes
-    else
-	echo "$PROG: autofs mount configured: $DIR/$ALLOC"
-    fi
+for NFS_EXPORT in $EXPORT_PATHS; do
+  ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+
+  if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
+    echo "$PROG: error: autofs configured, but failed to mount: $DIR/$ALLOC" >&2
+    echo "  This could be because this VM does not have permission to" >&2
+    echo "  NFS mount $ALLOC. Please check it is running in the correct" >&2
+    echo "  Nectar project that was nominated for NFS access." >&2
+    echo "  If problems persist, please contact QRIScloud Support." >&2
+    ERROR=yes
+  else
+    echo "$PROG: autofs mount successfully configured: $DIR/$ALLOC"
+  fi
 done
 
 if [ -n "$ERROR" ]; then

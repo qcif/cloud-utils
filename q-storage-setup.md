@@ -10,7 +10,9 @@ Synopsis
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
         [ -d | --dir dirname]
         [ -f | --force yum|apt]
-        [ -v | --verbose ] [ -h | --help ] storageID {storageID...}
+        [ -v | --verbose ]
+        [ -V | --version ]
+        [ -h | --help ] allocSpec {allocSpec...}
 
 Description
 -----------
@@ -19,14 +21,12 @@ _Don't want to read all this (even though you really should)? Then jump
 straight to the "Examples" section below._
 
 This script simplifies the task of setting up _autofs_, or directly
-mounting/unmounting, QRISdata Collection Storage allocations.  It
-also automatically detects which NFS server the particular storageID
-allocation is exported from, so the user does not need to be concerned
-about those details. All the user needs to know is the storageID
-(Qnnnn) of the allocation, and to have the permission to mount that
-allocation.
+mounting/unmounting, QRISdata Collection Storage allocations.
+Allocations can be specified by the NFS path or by the allocation's
+Q-number. If a Q-number is provided, the script automatically
+determines the NFS path to use.
 
-This script operates in one of four modes. The mode is set by using one
+This script operates in one of three modes. The mode is set by using one
 of these options:
 
 - `-a | --autofs` configure _autofs_ to automatically mount the storage.
@@ -36,9 +36,11 @@ of these options:
 
 - `-u | --umount` runs the _umount_ command to reverse the action of the _mount_ command.
 
+Other options are:
+
 - `-h | --help` shows help information.
 
-Other options are:
+- `-V | --version` shows the scripts version number.
 
 - `-d --dir name` sets the directory containing the mount point. The
 directory must be an absolute directory (i.e. starting with a
@@ -46,7 +48,6 @@ slash). Used in autofs, mount and unmount modes only. For mount and
 unmount modes, the directory must already exist; the default of `/mnt`
 is used if this option is not specified. For autofs mode, the default
 of `/data` is used if this option is not specified.
-
 
 - `-f | --force pkg` forces use of commands for the given package
 manager type. This script has been tested with particular Linux
@@ -60,8 +61,11 @@ particular package manager by using this option with `apt`, `dnf` or
 
 - `-v | --verbose` show extra information.
 
-The `storageID` must be one or more storage allocation names. These
-must be of the form "Qnnnn" where _n_ is a digit.
+The `allocSpec` is a storage allocation Q-number or NFS path. A
+Q-number is the leter "Q" followed by four digits (e.g. "Q0039").  The
+NFS path for an allocation can be found on the QRIScloud Services
+Portal, listed under the allocation in the "My Services" section
+(e.g. "10.255.120.200:/tier2d1/Q0039/Q0039").
 
 **Note:** The first time this script is used, it might take a few minutes to
 run. This is because it needs to download and install the dependent
@@ -85,9 +89,10 @@ detect in mount mode, because _autofs_ silently fails if errors are
 encountered.
 
 Note: previous autofs configurations created by this script will be
-deleted and replaced with a new configuration. To keep existing
-storageIDs, provide as arguments the current storageIDs as well as the
-new ones: the script accepts multiple storageID arguments.
+deleted and replaced with a new configuration. To keep mounting
+existing allocations, provide as arguments the current allocations as
+well as the new ones: the script accepts multiple allocation
+specification arguments.
 
 ### Mount mode
 
@@ -219,6 +224,14 @@ Files
 Diagnosis
 ---------
 
+### Check version
+
+If the script was downloaded a long time ago, please check (on GitHub)
+whether a newer version of the script exists. Use the newer version if
+one exists.
+
+    ./q-storage-setup.sh --version
+
 ### eth1 not found: not running on a QRIScloud virtual machine?
 
 QRISdata Collection Storage allocations can only be NFS mounted from
@@ -229,9 +242,9 @@ The virtual machine is not running in QRIScloud, so it cannot mount
 any QRISdata Collection Storage allocations. Use a virtual machine
 instance in "QRIScloud" and run the script from there.
 
-### error: autofs mount failed
+### error: autofs configured, but failed to mount
 
-The autofs was configured, but the mount does not work.
+The autofs was successfully configured, but the mount does not work.
 
 Try _ad hoc_ mounting the storage (i.e. without using autofs), and see
 what error message appears:
@@ -287,8 +300,8 @@ This error is printed out when performing an _ad hoc_ mount and the
 virtual machine instance does not have permission to mount the
 particular storage allocation.
 
-First, check the allocation storageID is correct; and the virtual
-machine is running in the correct NeCTAR project.
+First, check the allocation allocation specification is correct; and
+the virtual machine is running in the correct NeCTAR project.
 
 Secondly, if the VM instance was instantiated less than 5 minutes ago,
 the permissions might not have been applied to it. Wait up to 5
