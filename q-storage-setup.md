@@ -113,10 +113,6 @@ Undo the mounts created by the mount mode using the unmount mode (see below).
 This mode unmounts _ad hoc_ mounted storage. Use this mode to
 reverse the actions of the mount mode (see above).
 
-### Help mode
-
-Prints a short help message.
-
 Examples
 --------
 
