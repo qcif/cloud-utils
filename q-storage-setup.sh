@@ -59,7 +59,7 @@ nfs_export_from_portal() {
   ALLOC=$1
   NUM=`echo $ALLOC | sed s/Q0*//`
 
-  VALUE=`curl --silent --user-agent "q-storage-setup" -H "Accept: text/plain"  https://services.qriscloud.org.au/collectionStorage/allocation/${NUM}/nfs-path`
+  VALUE=`curl --silent --user-agent "q-storage-setup" -H "Accept: text/plain"  https://services.qriscloud.org.au/api/collectionStorage/allocation/${NUM}/nfs-path`
   if [ $? -ne 0 ]; then
     return;
   fi
