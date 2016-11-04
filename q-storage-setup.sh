@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=3.0.0
+VERSION=3.0.1
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -514,19 +514,33 @@ fi
 
 # Check NFS servers are accessible
 
+PING_GOOD=
 PING_ERROR=
 for NFS_SERVER in ${NFS_SERVERS}; do
   if ! ping -c 1 $NFS_SERVER > /dev/null 2>&1; then
-    echo "$PROG: warning: cannot ping NFS server: $NFS_SERVER" >&2
-    PING_ERROR=yes
+    PING_ERROR="$PING_ERROR $NFS_SERVER"
+  else
+    PING_GOOD="$PING_GOOD $NFS_SERVER"
   fi
 done
 
-if [ -n "$PING_ERROR" ]; then
+if [ -z "$PING_GOOD" ]; then
+  # None of the NFS servers were pingable: probably a network problem?
+  echo "$PROG: error: none of the NFS server can be pinged:$PING_ERROR" >&2
   if [ -z "$I_CONFIGURED_ETH1" ]; then
     echo "$PROG: please check $ETH1_CFG" >&2
   fi
   exit 1
+elif [ -n "$PING_ERROR" ]; then
+  # Some good, some bad
+ if [ -n "$VERBOSE" ]; then
+    echo "$PROG: warning: cannot ping some NFS servers:$PING_ERROR" >&2
+    echo "$PROG: mount might be ok if your allocation is not on them." >&2
+    echo "$PROG: mount will fail if it is." >&2
+  fi
+else
+  # All good
+  :
 fi
 
 # Check for NetworkManager
