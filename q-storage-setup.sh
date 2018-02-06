@@ -3,7 +3,7 @@
 # Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
 # instances.
 #
-# Copyright (C) 2013, 2016, Queensland Cyber Infrastructure Foundation Ltd.
+# Copyright (C) 2013, 2016, 2017 Queensland Cyber Infrastructure Foundation Ltd.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=3.0.1
+VERSION=3.1.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -30,7 +30,7 @@ MOUNT_OPTIONS_APT=
 
 MOUNT_AUTOFS_EXTRA=bg
 
-NFS_SERVERS="10.255.120.223 10.255.120.200 10.255.120.226"
+NFS_SERVERS="10.255.120.223 10.255.120.200 10.255.120.226 10.255.122.70"
 
 #----------------------------------------------------------------
 # Error checking
