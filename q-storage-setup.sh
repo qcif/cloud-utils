@@ -30,7 +30,7 @@ MOUNT_OPTIONS_APT=
 
 MOUNT_AUTOFS_EXTRA=bg
 
-NFS_SERVERS="10.255.120.223 10.255.120.200 10.255.120.226 10.255.122.70"
+NFS_SERVERS="10.255.120.200 10.255.120.226 10.255.122.70"
 
 #----------------------------------------------------------------
 # Error checking
@@ -61,11 +61,11 @@ nfs_export_from_portal() {
 
   VALUE=`curl --silent --user-agent "q-storage-setup" -H "Accept: text/plain"  https://services.qriscloud.org.au/api/collectionStorage/allocation/${NUM}/nfs-path`
   if [ $? -ne 0 ]; then
-    return;
+    return  # failed: curl failed
   fi
 
-  if ! echo "$VALUE" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\:\/[0-9A-Za-z]+\/Q[0-9]{4}\/Q[0-9]{4}$'; then  
-    return
+  if ! echo "$VALUE" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\:(\/[0-9A-Za-z]+)*\/Q[0-9]{4}\/Q[0-9]{4}$'; then
+    return  # failed: value doesn't look like a mount path
   fi
 
   echo $VALUE # success
@@ -599,8 +599,16 @@ for ALLOC_SPEC in "$@"; do
     VALUE=`nfs_export_from_portal $ALLOC_SPEC`
 
     if [ -z "$VALUE" ]; then
-      # Resort to using showmount
-      VALUE=`nfs_export_from_showmount $ALLOC_SPEC`
+	# Resort to using showmount
+	if [ -n "$VERBOSE" ]; then
+	    echo "$PROG: warning: could not get export path from services portal"
+	fi
+
+	VALUE=`nfs_export_from_showmount $ALLOC_SPEC`
+
+	if [ -n "$VERBOSE" -a -z "$VALUE" ]; then
+	    echo "$PROG: warning: could not get export path from showmount"
+	fi
     fi
 
     if [ -z "$VALUE" ]; then
@@ -623,6 +631,10 @@ for ALLOC_SPEC in "$@"; do
     echo "  Please report this to QRIScloud Support." >&2
     # The portal API or showmount returned an unexpected value.
     exit 1
+  fi
+
+  if [ -n "$VERBOSE" ]; then
+      echo "$PROG: mount path: $VALUE"
   fi
 
   # Append to list
