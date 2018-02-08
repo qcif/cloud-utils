@@ -19,12 +19,20 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=3.1.0
+VERSION=3.2.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
-MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
+# NFSv4 known working in Ubuntu 16.04
+# change conditional if other OSes supported/wanted
+if [[ $(python -mplatform | grep "Ubuntu-16.04") ]]; then 
+    MOUNT_OPTIONS="rw,nfsvers=4,hard,intr,nosuid,nodev,timeo=100,retrans=5"
+else
+    MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
+fi
+#MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
+
 MOUNT_OPTIONS_DNF_YUM=nolock
 MOUNT_OPTIONS_APT=
 
@@ -137,8 +145,8 @@ FORCE=
 
 ## Define options: trailing colon means has an argument
 
-SHORT_OPTS=hd:amuf:vV
-LONG_OPTS=help,dir:,autofs,mount,umount,force:,verbose,version
+SHORT_OPTS=hd:amuMf:vV
+LONG_OPTS=help,dir:,autofs,mount,umount,mtu,force:,verbose,version
 
 ALLOC_SPEC_HELP="
 allocSpec = the QRISdata Collection Storage allocation to mount/unmount.
@@ -153,6 +161,7 @@ Options:
   -a      configure and use autofs (default)
   -m      perform ad hoc mount
   -u      perform ad hoc unmount
+  -M      force MTU 9000
 
   -d name directory containing mount points
           default for autofs: $DEFAULT_AUTO_MOUNT_DIR
@@ -170,6 +179,7 @@ Options:
   -a | --autofs     configure and use autofs (default)
   -m | --mount      perform ad hoc mount
   -u | --umount     perform ad hoc unmount
+  -M | --mtu        force setting MTU to 9000
 
   -d | --dir name   directory containing mount points
                     default for autofs: $DEFAULT_AUTO_MOUNT_DIR
@@ -218,6 +228,7 @@ while [ $# -gt 0 ]; do
         -a | --autofs)   DO_AUTOFS=yes;;
         -m | --mount)    DO_MOUNT=yes;;
         -u | --umount)   DO_UMOUNT=yes;;
+        -M | --mtu)      DO_MTU=yes;;
         -d | --dir)      DIR="$2"; shift;;
         -f | --force)    FORCE="$2"; shift;;
         -V | --version)  echo "$PROG $VERSION"; exit 0;;
@@ -440,7 +451,19 @@ if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
       echo "$PROG: creating config file : $ETH1_CFG"
     fi
 
-    cat > "$ETH1_CFG" <<EOF
+    if [ -n "$DO_MTU" ]; then
+        cat > "$ETH1_CFG" <<EOF
+DEVICE="eth1"
+BOOTPROTO="dhcp"
+#NM_CONTROLLED="yes"
+ONBOOT="yes"
+DEFROUTE=no
+TYPE="Ethernet"
+MTU="9000"
+IPV6_MTU="9000"
+EOF
+    else
+        cat > "$ETH1_CFG" <<EOF
 DEVICE="eth1"
 BOOTPROTO="dhcp"
 #NM_CONTROLLED="yes"
@@ -453,6 +476,7 @@ TYPE="Ethernet"
 # MTU="9000"
 # IPV6_MTU="9000"
 EOF
+    fi
 
     # Bring up the network interface
 
@@ -480,7 +504,17 @@ elif [ "$FLAVOUR" = 'apt' ]; then
 
   if ! grep -q 'eth1' "$IF_FILE"; then
     # eth1 not yet configured
-    cat >> "$IF_FILE" <<EOF
+    if [ -n "$DO_MTU" ]; then
+        cat >> "$IF_FILE" <<EOF
+
+# The secondary network interface (connects to QRIScloud internal network)
+auto eth1
+iface eth1 inet dhcp
+post-up /sbin/ifconfig eth1 mtu 9000
+
+EOF
+    else
+        cat >> "$IF_FILE" <<EOF
 
 # The secondary network interface (connects to QRIScloud internal network)
 auto eth1
@@ -488,9 +522,10 @@ iface eth1 inet dhcp
 
 ## MTU size should have been provided by DHCP. If not, uncomment this line:
 #
-# pre-up /sbin/ifconfig eth1 mtu 9000
+#post-up /sbin/ifconfig eth1 mtu 9000
 
 EOF
+    fi
 
     if [ -n "$VERBOSE" ]; then
       echo "$PROG: ifup eth1"
@@ -504,6 +539,14 @@ EOF
 else
   echo "$PROG: internal error" >&2
   exit 3
+fi
+
+# Cycle eth1 if forcing MTU
+
+if [ -n "$DO_MTU" ]; then
+    #ifconfig eth1 mtu 9000
+    ifdown eth1
+    ifup eth1
 fi
 
 # Check MTU packet size
