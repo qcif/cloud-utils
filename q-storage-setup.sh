@@ -904,17 +904,25 @@ fi
 DMAP=/etc/auto.qriscloud
 
 if [ -n "$VERBOSE" ]; then
-  echo "$PROG: creating direct map file for autofs: $DMAP"
+  if [ -f "${DMAP}" ]; then
+    echo "${PROG}: extending direct map file for autofs: ${DMAP}"
+  else
+    echo "$PROG: creating direct map file for autofs: $DMAP"
+  fi
 fi
 
 TMP="$DMAP".tmp-$$
 trap "rm -f "$TMP"; echo $PROG: command failed: aborted; exit 3" ERR
 
-echo "# autofs mounts for storage" > "$TMP"
+if [ -f "${DMAP}" ]; then
+  # rm existing fs line if existing
+  grep -v "${DIR}/${ALLOC}" ${DMAP} > ${TMP}
+else
+  echo "# autofs mounts for storage" > "$TMP"
+fi
 
 for NFS_EXPORT in $EXPORT_PATHS; do
   ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
-
   echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
 done
 
