@@ -25,12 +25,14 @@ DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
 # NFSv4 known working in Ubuntu 16.04
+# BUT GUESS WHAT? It totally breaks UID/GID on Tier2 mounts
+# So we're reverting to NFSv3 regardless
 # change conditional if other OSes supported/wanted
-if [[ $(python -mplatform | grep "Ubuntu-16.04") ]]; then 
-    MOUNT_OPTIONS="rw,nfsvers=4,hard,intr,nosuid,nodev,timeo=100,retrans=5"
-else
+#if [[ $(python -mplatform | grep "Ubuntu-16.04") ]]; then 
+ #   MOUNT_OPTIONS="rw,nfsvers=4,hard,intr,nosuid,nodev,timeo=100,retrans=5"
+#else
     MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
-fi
+#fi
 #MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 
 MOUNT_OPTIONS_DNF_YUM=nolock
@@ -142,6 +144,7 @@ DO_UMOUNT=
 STAGE=
 DIR=
 FORCE=
+DO_MTU=
 
 ## Define options: trailing colon means has an argument
 
