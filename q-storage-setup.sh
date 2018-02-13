@@ -19,20 +19,13 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=3.2.0
+VERSION=3.3.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
-# NFSv4 known working in Ubuntu 16.04
-# change conditional if other OSes supported/wanted
-if [[ $(python -mplatform | grep "Ubuntu-16.04") ]]; then 
-    MOUNT_OPTIONS="rw,nfsvers=4,hard,intr,nosuid,nodev,timeo=100,retrans=5"
-else
-    MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
-fi
-#MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
-
+# Note: use NFS v3; NFS v4 does not work on tier2 NFS
+MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 MOUNT_OPTIONS_DNF_YUM=nolock
 MOUNT_OPTIONS_APT=
 
@@ -139,6 +132,7 @@ VERBOSE=
 DO_AUTOFS=
 DO_MOUNT=
 DO_UMOUNT=
+DO_MTU=
 STAGE=
 DIR=
 FORCE=
