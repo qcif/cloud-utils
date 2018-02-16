@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=3.3.0
+VERSION=3.4.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -107,8 +107,7 @@ nfs_export_from_showmount () {
 
       if [ -n "$RESULT" -o "$NUM_MATCHES" -ne 1 ]; then
         # Matches from another NFS server or multiple matches were found
-       echo "$PROG: error: $ALLOC has multiple NFS exports" >&2
-       echo "  Please contact QRIScloud Support to report this." >&2
+       echo "$PROG: error: $ALLOC has multiple NFS exports (please contact QRIScloud Support)" >&2
        exit 1
       fi
 
@@ -132,15 +131,14 @@ VERBOSE=
 DO_AUTOFS=
 DO_MOUNT=
 DO_UMOUNT=
-DO_MTU=
 STAGE=
 DIR=
 FORCE=
 
 ## Define options: trailing colon means has an argument
 
-SHORT_OPTS=hd:amuMf:vV
-LONG_OPTS=help,dir:,autofs,mount,umount,mtu,force:,verbose,version
+SHORT_OPTS=hd:amuf:vV
+LONG_OPTS=help,dir:,autofs,mount,umount,force:,verbose,version
 
 ALLOC_SPEC_HELP="
 allocSpec = the QRISdata Collection Storage allocation to mount/unmount.
@@ -155,7 +153,6 @@ Options:
   -a      configure and use autofs (default)
   -m      perform ad hoc mount
   -u      perform ad hoc unmount
-  -M      force MTU 9000
 
   -d name directory containing mount points
           default for autofs: $DEFAULT_AUTO_MOUNT_DIR
@@ -173,7 +170,6 @@ Options:
   -a | --autofs     configure and use autofs (default)
   -m | --mount      perform ad hoc mount
   -u | --umount     perform ad hoc unmount
-  -M | --mtu        force setting MTU to 9000
 
   -d | --dir name   directory containing mount points
                     default for autofs: $DEFAULT_AUTO_MOUNT_DIR
@@ -222,7 +218,6 @@ while [ $# -gt 0 ]; do
         -a | --autofs)   DO_AUTOFS=yes;;
         -m | --mount)    DO_MOUNT=yes;;
         -u | --umount)   DO_UMOUNT=yes;;
-        -M | --mtu)      DO_MTU=yes;;
         -d | --dir)      DIR="$2"; shift;;
         -f | --force)    FORCE="$2"; shift;;
         -V | --version)  echo "$PROG $VERSION"; exit 0;;
@@ -357,6 +352,7 @@ fi
 FLAVOUR=
 
 if [ -z "$FORCE" ]; then
+  # Try to automatically detect packet manager flavour
 
   OS=`uname -s`
   if [ "$OS" != 'Linux' ]; then
@@ -368,36 +364,27 @@ if [ -z "$FORCE" ]; then
 
   if which dnf > /dev/null 2>&1; then
     FLAVOUR=dnf
-  else
-    if which yum > /dev/null 2>&1; then
-      FLAVOUR=yum
-    fi
-  fi
-
-  if which apt-get > /dev/null 2>&1; then
-    if [ -n "$FLAVOUR" ]; then
-      echo "$PROG: error: detected dnf/yum and apt-get (use --force apt|dnf|yum)" >&2
-      exit 1
-    fi
+  elif which yum > /dev/null 2>&1; then
+    FLAVOUR=yum
+  elif which apt-get > /dev/null 2>&1; then
     FLAVOUR=apt
-  fi
-
-  if [ -z "$FLAVOUR" ]; then
-    echo "$PROG: error: package manager not found (use --force apt|dnf|yum)"
+  else
+    echo "$PROG: error: could not detect package manager (use --force apt|dnf|yum)" >&2
     exit 1
   fi
 
 else
-  # Use package manager specifed by --force
+  # Use package manager flavour specifed by --force
 
-  FLAVOUR="$FORCE"
-  if [ "$FLAVOUR" != 'dnf' -a "$FLAVOUR" != 'yum' -a "$FLAVOUR" != 'apt' ]; then
-    echo "$PROG: error: unsupported package manager (expecting \"apt\", \"dnf\" or \"yum\"): $FLAVOUR" >&2
+  if [ "$FORCE" != 'dnf' -a "$FORCE" != 'yum' -a "$FORCE" != 'apt' ]; then
+    echo $PROG': bad --force (expecting "apt", "dnf" or "yum"):' $FORCE >&2
     exit 2
   fi
+  FLAVOUR="$FORCE"
 fi
 
 #----------------------------------------------------------------
+# Set the mount options to use
 
 if [ $FLAVOUR = 'dnf' ]; then
   MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_DNF_YUM"
@@ -412,6 +399,9 @@ fi
 
 #----------------------------------------------------------------
 # Check for existance of private network interface
+
+# Note: it is assumed that all supported distributions have the "ip" command
+# even though some don't have ifconfig/ifup/ifdown.
 
 if ! which ip >/dev/null 2>&1; then
   echo "$PROG: error: command not found: ip" >&2
@@ -438,117 +428,188 @@ I_CONFIGURED_ETH1=
 
 if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
 
+  # The "net-tools" package has been deprecated by some distributions
+  # (e.g. Ubuntu 17.10) so the ifconfig/ifup/ifdown commands are not
+  # installed by default. But (so far) CentOS still has them installed.
+
+  if ! which ifup >/dev/null 2>&1; then
+    echo "$PROG: error: command not found: ifup" >&2
+    exit 1
+  fi
+  if ! which ifdown >/dev/null 2>&1; then
+    echo "$PROG: error: command not found: ifdown" >&2
+    exit 1
+  fi
+
   ETH1_CFG=/etc/sysconfig/network-scripts/ifcfg-eth1
 
   if [ ! -f "$ETH1_CFG" ]; then
+    # eth1 not configured: create eth1 configuration file
+
     if [ -n "$VERBOSE" ]; then
       echo "$PROG: creating config file : $ETH1_CFG"
     fi
 
-    if [ -n "$DO_MTU" ]; then
-        cat > "$ETH1_CFG" <<EOF
+    cat > "$ETH1_CFG" <<EOF
+# ifcfg-eth1: QRIScloud internal network interface
+# Created by $PROG on `date '+%F %T %:z'`
+# See <https://github.com/qcif/cloud-utils/blob/master/q-storage-setup.md>
+
 DEVICE="eth1"
 BOOTPROTO="dhcp"
-#NM_CONTROLLED="yes"
 ONBOOT="yes"
-DEFROUTE=no
-TYPE="Ethernet"
-MTU="9000"
-IPV6_MTU="9000"
-EOF
-    else
-        cat > "$ETH1_CFG" <<EOF
-DEVICE="eth1"
-BOOTPROTO="dhcp"
-#NM_CONTROLLED="yes"
-ONBOOT="yes"
-DEFROUTE=no
+DEFROUTE="no"
 TYPE="Ethernet"
 
-## MTU size should have been provided by DHCP. If not, uncomment these lines:
+# NetworkManager
 #
-# MTU="9000"
-# IPV6_MTU="9000"
+# NetworkManager is disabled (by NM_CONTROLLED="no") because it has been known
+# to dynamically change the interface's configuration and cause it to
+# unexpectedly break. Unless NetworkManager is properly configured, it is better
+# to disable it.
+
+NM_CONTROLLED="no"
+
+# MTU size
+#
+# The MTU size should be configured by DHCP. If not, uncomment these lines.
+# There is a known problem with some releases of OpenStack that prevents setting
+# the MTU size by DHCP from working. Until that is fixed, this configures it.
+
+# MTU=9000
+# IPV6_MTU=9000
 EOF
-    fi
 
     # Bring up the network interface
+    # Do not use "ip link set dev eth1 up" since it doesn't read ifcfg-eth1
 
     if [ -n "$VERBOSE" ]; then
-      echo "$PROG: ifup eth1"
-    fi
-    ifup eth1 > /dev/null
-
-    # Show DHCP assigned IP addresses
-
-    if [ -n "$VERBOSE" ]; then
-      ip addr show dev eth1
+	ifup eth1
+    else
+	ifup eth1  >/dev/null 2>&1
     fi
 
-    I_CONFIGURED_ETH1=yes
+    # Check MTU packet size
+
+    if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
+	# MTU is not 9000: explicitly configure it to be 9000.
+	#
+	# In early-2018, OpenStack has made a change so using DHCP to set the
+	# MTU size does not work. This code is to work around it.
+
+	if [ -n "$VERBOSE" ]; then
+	    echo "$PROG: DHCP MTU not working: configuring eth1 MTU 9000" >&2
+	fi
+
+	# Uncomment the MTU configuration lines
+
+	sed -i 's/^# *\(.*MTU=9000\) *$/\1/' "$ETH1_CFG"
+
+	# Restart the interface to use MTU 9000 configuration
+	# Do not use "ip link set dev eth1 up" since it doesn't read ifcfg-eth1
+
+	if [ -n "$VERBOSE" ]; then
+            ifdown eth1
+	    ifup eth1
+	else
+            ifdown eth1  >/dev/null 2>&1
+	    ifup eth1  >/dev/null 2>&1
+	fi
+    fi
+
+    I_CONFIGURED_ETH1="$ETH1_CFG"
   fi
 
 elif [ "$FLAVOUR" = 'apt' ]; then
 
   IF_FILE=/etc/network/interfaces
+
   if [ ! -f "$IF_FILE" ]; then
     echo "$PROG: file missing: $IF_FILE" >&2
     exit 1
   fi
 
   if ! grep -q 'eth1' "$IF_FILE"; then
-    # eth1 not yet configured
-    if [ -n "$DO_MTU" ]; then
-        cat >> "$IF_FILE" <<EOF
+    # eth1 not yet configured: append eth1 lines to the interfaces file
 
-# The secondary network interface (connects to QRIScloud internal network)
-auto eth1
-iface eth1 inet dhcp
-post-up /sbin/ifconfig eth1 mtu 9000
+    cat >> "$IF_FILE" <<EOF
 
-EOF
-    else
-        cat >> "$IF_FILE" <<EOF
+# The secondary network interface (QRIScloud internal network interface)
+# Added by $PROG on `date '+%F %T %:z'`
+# See <https://github.com/qcif/cloud-utils/blob/master/q-storage-setup.md>
 
-# The secondary network interface (connects to QRIScloud internal network)
 auto eth1
 iface eth1 inet dhcp
 
-## MTU size should have been provided by DHCP. If not, uncomment this line:
-#
-#post-up /sbin/ifconfig eth1 mtu 9000
+# The MTU size on the secondary network interface should be configured by DHCP.
+# If not, uncomment the following line.
+# There is a known problem with some releases of OpenStack that prevents setting
+# the MTU size by DHCP from working. Until that is fixed, this configures it.
+#     post-up /sbin/ip link set dev eth1 mtu 9000
 
 EOF
-    fi
+
+    # Bring up the interface
 
     if [ -n "$VERBOSE" ]; then
-      echo "$PROG: ifup eth1"
-      ifup eth1
+	ip link set dev eth1 up
     else
-      ifup eth1 >/dev/null 2>&1
+	ip link set dev eth1 up  >/dev/null 2>&1
     fi
 
-  fi 
+    # Check MTU packet size
+
+    if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
+	# MTU is not 9000: explicitly configure it to be 9000.
+	#
+	# In early-2018, OpenStack has made a change so using DHCP to set the
+	# MTU size does not work. This code is to work around it.
+
+	if [ -n "$VERBOSE" ]; then
+	    echo "$PROG: DHCP MTP not working: configuring eth1 MTU 9000" >&2
+	fi
+
+	# Uncomment the MTU configuration line
+	
+	sed -i 's/^# *\(post-up.*mtu 9000\) *$/\1/' "$IF_FILE"
+
+	# Restart the interface to use MTU 9000 configuration
+
+	if [ -n "$VERBOSE" ]; then
+	    ip link set dev eth1 down
+	    ip link set dev eth1 up
+	else
+	    ip link set dev eth1 down  >/dev/null 2>&1
+	    ip link set dev eth1 up  >/dev/null 2>&1
+	fi
+    fi
+
+    I_CONFIGURED_ETH1="$IF_FILE"
+  fi
 
 else
   echo "$PROG: internal error" >&2
   exit 3
 fi
 
-# Cycle eth1 if forcing MTU
+# Show the DHCP assigned IP address
 
-if [ -n "$DO_MTU" ]; then
-    #ifconfig eth1 mtu 9000
-    ifdown eth1
-    ifup eth1
+if [ -n "$VERBOSE" ]; then
+  ip addr show dev eth1
 fi
 
 # Check MTU packet size
 
+if ! ip addr show dev eth1 | grep -q ' inet '; then
+    echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
+    exit 1
+fi
 if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-  echo "$PROG: warning: MTU for eth1 is not 9000 bytes" >&2
+    echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+    exit 1
 fi
 
+#----------------------------------------------------------------
 # Check NFS servers are accessible
 
 PING_GOOD=
@@ -565,7 +626,7 @@ if [ -z "$PING_GOOD" ]; then
   # None of the NFS servers were pingable: probably a network problem?
   echo "$PROG: error: none of the NFS server can be pinged:$PING_ERROR" >&2
   if [ -z "$I_CONFIGURED_ETH1" ]; then
-    echo "$PROG: please check $ETH1_CFG" >&2
+    echo "$PROG: please check $I_CONFIGURED_ETH1" >&2
   fi
   exit 1
 elif [ -n "$PING_ERROR" ]; then
@@ -578,16 +639,6 @@ elif [ -n "$PING_ERROR" ]; then
 else
   # All good
   :
-fi
-
-# Check for NetworkManager
-
-if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
-  if [ -n "$VERBOSE" ]; then
-    if rpm -q NetworkManager >/dev/null; then
-      echo "$PROG: warning: NetworkManager installed, consider uninstalling it" >&2
-    fi
-  fi
 fi
 
 #----------------------------------------------------------------
@@ -930,13 +981,18 @@ fi
 
 if which systemctl >/dev/null 2>&1; then
   # Systemd is used
-  systemctl restart autofs.service
+  systemctl enable autofs.service >/dev/null
+  systemctl restart autofs.service >/dev/null
 else
   # Init.d is used
-  service autofs restart
+    service autofs restart >/dev/null
+    echo "$PROG: warning: using init.d instead of systemd"
 fi
 
+#----------------------------------------------------------------
 # Check mounts work
+
+sleep 1  # needed, otherwise sometimes the mounts fail the test below
 
 ERROR=
 for NFS_EXPORT in $EXPORT_PATHS; do
