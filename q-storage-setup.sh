@@ -3,7 +3,7 @@
 # Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
 # instances.
 #
-# Copyright (C) 2013, 2016, 2017 Queensland Cyber Infrastructure Foundation Ltd.
+# Copyright (C) 2013-2018 Queensland Cyber Infrastructure Foundation Ltd.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,7 +38,9 @@ NFS_SERVERS="10.255.120.200 10.255.120.226 10.255.122.70"
 
 PROG=`basename "$0"`
 
-trap "echo $PROG: command failed: aborted; exit 3" ERR # abort if command fails
+LOG="/tmp/${PROG}-$$.log"
+
+trap "echo $PROG: command failed: aborted (see $LOG); exit 3" ERR
 # Can't figure out which command failed? Run using "bash -x" or uncomment:
 #   set -x # write each command to stderr before it is exceuted
 
@@ -81,7 +83,7 @@ nfs_export_from_showmount () {
   for NFS_SERVER in ${NFS_SERVERS}; do
     # showmount will produce lines like "/tier2d1/Q0039/Q0039 10.255.120.8/32"
     # The first `grep` keeps the lines that match the allocation.
-    # The second `grep` matches this host's IP address (ends in comma or "/32").
+    # The second `grep` matches host's IP address (ends in comma or "/32").
     # The `cut` command keeps the first column, which is the export path.
 
     MATCH=`showmount -e "$NFS_SERVER" | grep "${ALLOC}/${ALLOC}" | egrep "[ ,]${IP_ADDRESS}((,.*)|(/32.*))$" | cut -d ' ' -f 1`
@@ -93,8 +95,8 @@ nfs_export_from_showmount () {
 
       if [ -n "$RESULT" -o "$NUM_MATCHES" -ne 1 ]; then
         # Matches from another NFS server or multiple matches were found
-       echo "$PROG: error: $ALLOC has multiple NFS exports (please contact QRIScloud Support)" >&2
-       exit 1
+        echo "$PROG: error: $ALLOC has multiple NFS exports (please contact QRIScloud Support)" >&2
+        exit 1
       fi
 
       RESULT="$NFS_SERVER:$MATCH"
@@ -123,8 +125,8 @@ FORCE=
 
 ## Define options: trailing colon means has an argument
 
-SHORT_OPTS=hd:amuf:vV
-LONG_OPTS=help,dir:,autofs,mount,umount,force:,verbose,version
+SHORT_OPTS=hd:amufvV
+LONG_OPTS=help,dir:,autofs,mount,umount,force,verbose,version
 
 ALLOC_SPEC_HELP="
 allocSpec = the QRISdata Collection Storage allocation to mount/unmount.
@@ -160,7 +162,6 @@ Options:
   -d | --dir name   directory containing mount points
                     default for autofs: $DEFAULT_AUTO_MOUNT_DIR
                     default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR
-  -f | --force pkg  set package manager type (\"apt\", \"dnf\" or \"yum\")
 
   -v | --verbose    show extra information
   -V | --version    show version
@@ -200,23 +201,23 @@ eval set -- $ARGS
 ## Process parsed options (customize this: 2 of 3)
 
 while [ $# -gt 0 ]; do
-    case "$1" in
-        -a | --autofs)   DO_AUTOFS=yes;;
-        -m | --mount)    DO_MOUNT=yes;;
-        -u | --umount)   DO_UMOUNT=yes;;
-        -d | --dir)      DIR="$2"; shift;;
-        -f | --force)    FORCE="$2"; shift;;
-        -V | --version)  echo "$PROG $VERSION"; exit 0;;
-        -v | --verbose)  VERBOSE=yes;;
+  case "$1" in
+    -a | --autofs)   DO_AUTOFS=yes;;
+    -m | --mount)    DO_MOUNT=yes;;
+    -u | --umount)   DO_UMOUNT=yes;;
+    -d | --dir)      DIR="$2"; shift;;
+    -f | --force)    FORCE=yes;;
+    -V | --version)  echo "$PROG $VERSION"; exit 0;;
+    -v | --verbose)  VERBOSE=yes;;
 
-        -h | --help)     if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]
-                         then echo "$LONG_HELP";
-                         else echo "$SHORT_HELP";
-                         fi;  exit 0;;
-        --version)       echo "$PROG $VERSION"; exit 0;;
-        --)              shift; break;; # end of options
-    esac
-    shift
+    -h | --help)     if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]
+                     then echo "$LONG_HELP";
+                     else echo "$SHORT_HELP";
+                     fi;  exit 0;;
+    --version)       echo "$PROG $VERSION"; exit 0;;
+    --)              shift; break;; # end of options
+  esac
+  shift
 done
 
 if [ -n "$DO_MOUNT" -a -n "$DO_UMOUNT" ]; then
@@ -317,7 +318,7 @@ for ALLOC_SPEC in "$@"; do
     ERROR=1
     continue
   fi
- 
+
   if [ "$NUM" -gt 999 ]; then
     # This will cause UID/GID to violate the 54nnn pattern and
     # the behaviour is not yet defined.
@@ -335,38 +336,30 @@ fi
 #----------------------------------------------------------------
 # Check pre-conditions
 
-FLAVOUR=
-
 if [ -z "$FORCE" ]; then
-  # Try to automatically detect packet manager flavour
+  # Check OS is supported
 
   OS=`uname -s`
   if [ "$OS" != 'Linux' ]; then
-    echo "$PROG: error: unsupported OS: $OS (use --force apt|dnf|yum)"
+    echo "$PROG: error: unsupported OS: $OS (use --force if you feel lucky)"
     exit 1
   fi
+fi
 
-  # Detect package manager
+#----------------------------------------------------------------
+# Detect package manager
 
-  if which dnf > /dev/null 2>&1; then
-    FLAVOUR=dnf
-  elif which yum > /dev/null 2>&1; then
-    FLAVOUR=yum
-  elif which apt-get > /dev/null 2>&1; then
-    FLAVOUR=apt
-  else
-    echo "$PROG: error: could not detect package manager (use --force apt|dnf|yum)" >&2
-    exit 1
-  fi
+FLAVOUR=
 
+if which dnf > /dev/null 2>&1; then
+  FLAVOUR=dnf
+elif which yum > /dev/null 2>&1; then
+  FLAVOUR=yum
+elif which apt-get > /dev/null 2>&1; then
+  FLAVOUR=apt
 else
-  # Use package manager flavour specifed by --force
-
-  if [ "$FORCE" != 'dnf' -a "$FORCE" != 'yum' -a "$FORCE" != 'apt' ]; then
-    echo $PROG': bad --force (expecting "apt", "dnf" or "yum"):' $FORCE >&2
-    exit 2
-  fi
-  FLAVOUR="$FORCE"
+  echo "$PROG: error: could not find package manager: dnf, yum or apt-get" >&2
+  exit 1
 fi
 
 #----------------------------------------------------------------
@@ -408,6 +401,13 @@ if [ `id -u` != '0' ]; then
 fi
 
 #----------------------------------------------------------------
+# Start log
+
+TIMESTAMP=`date '+%F %T %:z'`
+
+echo "$PROG: $TIMESTAMP" >>"$LOG" 2>&1
+
+#----------------------------------------------------------------
 # Configure private network interface
 
 I_CONFIGURED_ETH1=
@@ -438,7 +438,8 @@ if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
 
     cat > "$ETH1_CFG" <<EOF
 # ifcfg-eth1: QRIScloud internal network interface
-# Created by $PROG on `date '+%F %T %:z'`
+# Created by $PROG on $TIMESTAMP
+#
 # See <https://github.com/qcif/cloud-utils/blob/master/q-storage-setup.md>
 
 DEVICE="eth1"
@@ -451,16 +452,19 @@ TYPE="Ethernet"
 #
 # NetworkManager is disabled (by NM_CONTROLLED="no") because it has been known
 # to dynamically change the interface's configuration and cause it to
-# unexpectedly break. Unless NetworkManager is properly configured, it is better
-# to disable it.
+# unexpectedly stop working. Unless NetworkManager is properly configured, it
+# is better to disable it. NetworkManager is useful a dynamically changing
+# network environment (such as a portable laptop), but less useful for a static
+# server environment.
 
 NM_CONTROLLED="no"
 
 # MTU size
 #
 # The MTU size should be configured by DHCP. If not, uncomment these lines.
-# There is a known problem with some releases of OpenStack that prevents setting
-# the MTU size by DHCP from working. Until that is fixed, this configures it.
+# There is a known problem with some releases of OpenStack that prevents
+# setting the MTU size by DHCP from working. Until that is fixed, this
+# configures it.
 
 # MTU=9000
 # IPV6_MTU=9000
@@ -469,44 +473,36 @@ EOF
     # Bring up the network interface
     # Do not use "ip link set dev eth1 up" since it doesn't read ifcfg-eth1
 
-    if [ -n "$VERBOSE" ]; then
-	ifup eth1
-    else
-	ifup eth1  >/dev/null 2>&1
-    fi
+    ifup eth1  >>"$LOG" 2>&1
 
     # Check MTU packet size
 
     if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-	# MTU is not 9000: explicitly configure it to be 9000.
-	#
-	# In early-2018, OpenStack has made a change so using DHCP to set the
-	# MTU size does not work. This code is to work around it.
+      # MTU is not 9000: explicitly configure it to be 9000.
+      #
+      # In early-2018, OpenStack has made a change so using DHCP to set the
+      # MTU size does not work. This code is to work around it.
 
-	if [ -n "$VERBOSE" ]; then
-	    echo "$PROG: DHCP MTU not working: configuring eth1 MTU 9000" >&2
-	fi
+      if [ -n "$VERBOSE" ]; then
+        echo "$PROG: DHCP MTU not working: configuring eth1 MTU 9000" >&2
+      fi
 
-	# Uncomment the MTU configuration lines
+      # Uncomment the MTU configuration lines
 
-	sed -i 's/^# *\(.*MTU=9000\) *$/\1/' "$ETH1_CFG"
+      sed -i 's/^# *\(.*MTU=9000\) *$/\1/' "$ETH1_CFG"
 
-	# Restart the interface to use MTU 9000 configuration
-	# Do not use "ip link set dev eth1 up" since it doesn't read ifcfg-eth1
+      # Restart the interface to use MTU 9000 configuration
+      # Do not use "ip link set dev eth1 up" since it doesn't read ifcfg-eth1
 
-	if [ -n "$VERBOSE" ]; then
-            ifdown eth1
-	    ifup eth1
-	else
-            ifdown eth1  >/dev/null 2>&1
-	    ifup eth1  >/dev/null 2>&1
-	fi
+      ifdown eth1  >>"$LOG" 2>&1
+      ifup eth1  >>"$LOG" 2>&1
     fi
 
     I_CONFIGURED_ETH1="$ETH1_CFG"
   fi
 
 elif [ "$FLAVOUR" = 'apt' ]; then
+  # Older Ubuntu
 
   IF_FILE=/etc/network/interfaces
 
@@ -521,7 +517,7 @@ elif [ "$FLAVOUR" = 'apt' ]; then
     cat >> "$IF_FILE" <<EOF
 
 # The secondary network interface (QRIScloud internal network interface)
-# Added by $PROG on `date '+%F %T %:z'`
+# Added by $PROG on $TIMESTAMP
 # See <https://github.com/qcif/cloud-utils/blob/master/q-storage-setup.md>
 
 auto eth1
@@ -537,37 +533,28 @@ EOF
 
     # Bring up the interface
 
-    if [ -n "$VERBOSE" ]; then
-	ip link set dev eth1 up
-    else
-	ip link set dev eth1 up  >/dev/null 2>&1
-    fi
+    ip link set dev eth1 up  >>"$LOG" 2>&1
 
     # Check MTU packet size
 
     if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-	# MTU is not 9000: explicitly configure it to be 9000.
-	#
-	# In early-2018, OpenStack has made a change so using DHCP to set the
-	# MTU size does not work. This code is to work around it.
+      # MTU is not 9000: explicitly configure it to be 9000.
+      #
+      # In early-2018, OpenStack has made a change so using DHCP to set the
+      # MTU size does not work. This code is to work around it.
 
-	if [ -n "$VERBOSE" ]; then
-	    echo "$PROG: DHCP MTP not working: configuring eth1 MTU 9000" >&2
-	fi
+      if [ -n "$VERBOSE" ]; then
+        echo "$PROG: DHCP MTP not working: configuring eth1 MTU 9000" >&2
+      fi
 
-	# Uncomment the MTU configuration line
-	
-	sed -i 's/^# *\(post-up.*mtu 9000\) *$/\1/' "$IF_FILE"
+      # Uncomment the MTU configuration line
 
-	# Restart the interface to use MTU 9000 configuration
+      sed -i 's/^# *\(post-up.*mtu 9000\) *$/\1/' "$IF_FILE"
 
-	if [ -n "$VERBOSE" ]; then
-	    ip link set dev eth1 down
-	    ip link set dev eth1 up
-	else
-	    ip link set dev eth1 down  >/dev/null 2>&1
-	    ip link set dev eth1 up  >/dev/null 2>&1
-	fi
+      # Restart the interface to use MTU 9000 configuration
+
+      ip link set dev eth1 down  >>"$LOG" 2>&1
+      ip link set dev eth1 up  >>"$LOG" 2>&1
     fi
 
     I_CONFIGURED_ETH1="$IF_FILE"
@@ -578,28 +565,22 @@ else
   exit 3
 fi
 
-# Show the DHCP assigned IP address
-
-if [ -n "$VERBOSE" ]; then
-  ip addr show dev eth1
-fi
-
 # Get the eth1 IPv4 address
 
 MYIP=`ip addr show dev eth1 scope global | grep 'inet ' | sed 's/^ *inet \(.*\)\/.*/\1/'`
 if [ -z "$MYIP" ]; then
-    echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
-    exit 1
+  echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
+  exit 1
 fi
 if [ -n "$VERBOSE" ]; then
-    echo "$PROG: eth1 IPv4 address: $MYIP"
+  echo "$PROG: eth1 IPv4 address: $MYIP"
 fi
 
 # Check MTU packet size
 
 if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-    echo "$PROG: warning: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
-    # exit 1
+  echo "$PROG: warning: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+  # exit 1
 fi
 
 #----------------------------------------------------------------
@@ -608,7 +589,7 @@ fi
 PING_GOOD=
 PING_ERROR=
 for NFS_SERVER in ${NFS_SERVERS}; do
-  if ! ping -c 1 $NFS_SERVER > /dev/null 2>&1; then
+  if ! ping -c 1 $NFS_SERVER >>"$LOG" 2>&1; then
     PING_ERROR="$PING_ERROR $NFS_SERVER"
   else
     PING_GOOD="$PING_GOOD $NFS_SERVER"
@@ -624,10 +605,10 @@ if [ -z "$PING_GOOD" ]; then
   exit 1
 elif [ -n "$PING_ERROR" ]; then
   # Some good, some bad
- if [ -n "$VERBOSE" ]; then
-    echo "$PROG: warning: cannot ping some NFS servers:$PING_ERROR" >&2
-    echo "$PROG: mount might be ok if your allocation is not on them." >&2
-    echo "$PROG: mount will fail if it is." >&2
+  if [ -n "$VERBOSE" ]; then
+    echo "$PROG: warning: cannot ping some NFS servers:$PING_ERROR" >>"$LOG"
+    echo "$PROG: mount might be ok if your allocation is not on them." >>"$LOG"
+    echo "$PROG: mount will fail if it is." >>"$LOG"
   fi
 else
   # All good
@@ -642,8 +623,7 @@ if [ "$FLAVOUR" = 'dnf' ]; then
   # nfs-utils
   if ! rpm -q nfs-utils > /dev/null; then
     # Package not installed: install it
-    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
-    dnf -y $QUIET_FLAG install "nfs-utils"
+    dnf -y install "nfs-utils" >>"$LOG" 2>&1
   fi
 
 elif [ "$FLAVOUR" = 'yum' ]; then
@@ -651,15 +631,13 @@ elif [ "$FLAVOUR" = 'yum' ]; then
   # nfs-utils
   if ! rpm -q nfs-utils > /dev/null; then
     # Package not installed: install it
-    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
-    yum -y $QUIET_FLAG install "nfs-utils"
+    yum -y install "nfs-utils" >>"$LOG" 2>&1
   fi
 
 elif [ "$FLAVOUR" = 'apt' ]; then
 
   # nfs-common
-  if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-qq"; fi
-  apt-get -y --no-upgrade $QUIET_FLAG install "nfs-common"
+  apt-get -y --no-upgrade install "nfs-common" >>"$LOG" 2>&1
 
 else
   echo "$PROG: internal error" >&2
@@ -680,12 +658,13 @@ for ALLOC_SPEC in "$@"; do
 
     if [ -z "$VALUE" ]; then
       cat >&2 <<EOF
-$PROG: error: no NFS export for $ALLOC_SPEC to this machine ($MYIP)
-  Please wait and try again. If this machine was recently launched, it can take
-  up to 5 minutes before the NFS export is available. Also the NFS export might
-  not be found if the NFS server is highly loaded.  If it does not work after a
-  few retries, either specify an explicit NFS export path instead of a Q-number
-  or contact QRIScloud support.
+$PROG: error: no export for $ALLOC_SPEC to this machine ($MYIP)
+  Check this machine is running in the Nectar project nominated for NFS access.
+  If it is, please wait and try again. It can take up to 5 minutes after
+  launching for the NFS export to be available, and automatically getting the
+  NFS export path can be unreliable if the NFS server is highly loaded.
+  If it does not work after a few retries, either specify an explicit NFS
+  export path instead of a Q-number, or contact QRIScloud support.
 EOF
       exit 1
     fi
@@ -700,12 +679,11 @@ EOF
   if ! echo "$VALUE" | grep -q -E '\/Q[0-9]{4}$'; then
     echo "$PROG: internal error: unexpected export path syntax: $VALUE" >&2
     echo "  Please report this to QRIScloud Support." >&2
-    # The portal API or showmount returned an unexpected value.
     exit 1
   fi
 
   if [ -n "$VERBOSE" ]; then
-      echo "$PROG: mount path: $VALUE"
+    echo "$PROG: mount path: $VALUE"
   fi
 
   # Append to list
@@ -898,8 +876,7 @@ if [ "$FLAVOUR" = 'dnf' ]; then
 
   if ! rpm -q autofs > /dev/null; then
     # Package not installed: install it
-    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
-    dnf -y $QUIET_FLAG install "autofs"
+    dnf -y install "autofs" >>"$LOG" 2>&1
   fi
 
 elif [ "$FLAVOUR" = 'yum' ]; then
@@ -908,16 +885,14 @@ elif [ "$FLAVOUR" = 'yum' ]; then
 
   if ! rpm -q autofs > /dev/null; then
     # Package not installed: install it
-    if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-q"; fi
-    yum -y $QUIET_FLAG install "autofs"
+    yum -y install "autofs" >>"$LOG" 2>&1
   fi
 
 elif [ "$FLAVOUR" = 'apt' ]; then
 
   # TODO: check if already installed?
 
-  if [ -n "$VERBOSE" ]; then QUIET_FLAG=; else QUIET_FLAG="-qq"; fi
-  apt-get -y --no-upgrade $QUIET_FLAG install "autofs"
+  apt-get -y --no-upgrade install "autofs" >>"$LOG" 2>&1
 
 else
   echo "$PROG: internal error" >&2
@@ -962,14 +937,18 @@ fi
 
 # Restart autofs service (so it uses the new configuration)
 
+if [ -n "$VERBOSE" ]; then
+  echo "$PROG: restarting autofs"
+fi
+
 if which systemctl >/dev/null 2>&1; then
   # Systemd is used
-  systemctl enable autofs.service >/dev/null
-  systemctl restart autofs.service >/dev/null
+  systemctl enable autofs.service  >>"$LOG" 2>&1
+  systemctl restart autofs.service  >>"$LOG" 2>&1
 else
   # Init.d is used
-    service autofs restart >/dev/null
-    echo "$PROG: warning: using init.d instead of systemd"
+  service autofs restart  >>"$LOG" 2>&1
+  echo "$PROG: warning: using init.d instead of systemd"
 fi
 
 #----------------------------------------------------------------
@@ -982,23 +961,27 @@ for NFS_EXPORT in $EXPORT_PATHS; do
   ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
 
   if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
-    echo "$PROG: error: autofs configured, but failed to mount: $DIR/$ALLOC" >&2
+    echo "$PROG: failed to mount: $DIR/$ALLOC" >>"$LOG"
+    echo "$PROG: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
     echo "  This could be because this VM does not have permission to" >&2
     echo "  NFS mount $ALLOC. Please check it is running in the correct" >&2
     echo "  Nectar project that was nominated for NFS access." >&2
-    echo "  If problems persist, please contact QRIScloud Support." >&2
+    echo "  If the problem persists, please contact QRIScloud Support." >&2
     ERROR=yes
   else
-    echo "$PROG: autofs mount successfully configured: $DIR/$ALLOC"
+    echo "$PROG: autofs mount successful: $DIR/$ALLOC" >>"$LOG"
+    echo "$PROG: autofs mount successful: $DIR/$ALLOC"
   fi
 done
 
 if [ -n "$ERROR" ]; then
-    exit 1
+  exit 1
 fi
 
 #----------------------------------------------------------------
 # Success
+
+echo "$PROG: done" >>"$LOG"
 
 exit 0
 
