@@ -51,29 +51,9 @@ set -u # fail on attempts to expand undefined variables
 # Functions
 
 # Function to determine NFS servers and export directory for an allocation
-# using the QRIScloud Portal API.
-#
-# Returns both the server and export path as a single string
-# (e.g. "10.255.120.200:/tier2d1/Q0039/Q0039").
-
-nfs_export_from_portal() {
-  ALLOC=$1
-  NUM=`echo $ALLOC | sed s/Q0*//`
-
-  VALUE=`curl --silent --user-agent "q-storage-setup" -H "Accept: text/plain"  https://services.qriscloud.org.au/api/collectionStorage/allocation/${NUM}/nfs-path`
-  if [ $? -ne 0 ]; then
-    return  # failed: curl failed
-  fi
-
-  if ! echo "$VALUE" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\:(\/[0-9A-Za-z]+)*\/Q[0-9]{4}\/Q[0-9]{4}$'; then
-    return  # failed: value doesn't look like a mount path
-  fi
-
-  echo $VALUE # success
-}
-
-# Function to determine NFS servers and export directory for an allocation
 # using the showmount command.
+#
+# Usage: nfs_export_from_showmount Q-number IP-address
 #
 # Returns both the server and export path as a single string
 # (e.g. "10.255.120.200:/tier2d1/Q0039/Q0039").
@@ -81,11 +61,15 @@ nfs_export_from_portal() {
 # Note: this must be done after installing the NFS utilities,
 # otherwise the `showmount` command might not be installed.
 #
+# The allocation must be exported to the IP address for a valid result
+# to be returned.
+#
 # The showmount command is not always reliable (e.g. due to load on the
 # server), so this may return a blank result even though the mount exists.
 
 nfs_export_from_showmount () {
   ALLOC=$1
+  IP_ADDRESS=$2
 
   if ! which showmount >/dev/null 2>&1; then
     echo "$PROG: error: command not found: showmount" >&2
@@ -96,12 +80,14 @@ nfs_export_from_showmount () {
   RESULT=
   for NFS_SERVER in ${NFS_SERVERS}; do
     # showmount will produce lines like "/tier2d1/Q0039/Q0039 10.255.120.8/32"
-    # The `cut` command keeps the first column and the `grep` keeps only those
-    # that ends in the desired allocation number.
+    # The first `grep` keeps the lines that match the allocation.
+    # The second `grep` matches this host's IP address (ends in comma or "/32").
+    # The `cut` command keeps the first column, which is the export path.
 
-    MATCH=`showmount -e "$NFS_SERVER" | cut -d ' ' -f 1 | grep "${ALLOC}/${ALLOC}\$"`
+    MATCH=`showmount -e "$NFS_SERVER" | grep "${ALLOC}/${ALLOC}" | egrep "[ ,]${IP_ADDRESS}((,.*)|(/32.*))$" | cut -d ' ' -f 1`
+
     if [ -n "$MATCH" ]; then
-      # Match or matches were found
+      # Match or matches were found for the allocation
 
       NUM_MATCHES=`echo "$MATCH" | wc -l`
 
@@ -598,15 +584,22 @@ if [ -n "$VERBOSE" ]; then
   ip addr show dev eth1
 fi
 
-# Check MTU packet size
+# Get the eth1 IPv4 address
 
-if ! ip addr show dev eth1 | grep -q ' inet '; then
+MYIP=`ip addr show dev eth1 scope global | grep 'inet ' | sed 's/^ *inet \(.*\)\/.*/\1/'`
+if [ -z "$MYIP" ]; then
     echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
     exit 1
 fi
+if [ -n "$VERBOSE" ]; then
+    echo "$PROG: eth1 IPv4 address: $MYIP"
+fi
+
+# Check MTU packet size
+
 if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-    echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
-    exit 1
+    echo "$PROG: warning: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+    # exit 1
 fi
 
 #----------------------------------------------------------------
@@ -681,29 +674,19 @@ for ALLOC_SPEC in "$@"; do
   VALUE=
 
   if echo $ALLOC_SPEC | grep -q '^Q[0-9][0-9]*$'; then
-    # Argument is a Q-number: lookup
+    # Argument is a Q-number: detect the export path advertised using showmount
 
-    # Try using the QRIScloud Services Portal first
-    VALUE=`nfs_export_from_portal $ALLOC_SPEC`
-
-    if [ -z "$VALUE" ]; then
-	# Resort to using showmount
-	if [ -n "$VERBOSE" ]; then
-	    echo "$PROG: warning: could not get export path from services portal"
-	fi
-
-	VALUE=`nfs_export_from_showmount $ALLOC_SPEC`
-
-	if [ -n "$VERBOSE" -a -z "$VALUE" ]; then
-	    echo "$PROG: warning: could not get export path from showmount"
-	fi
-    fi
+    VALUE=`nfs_export_from_showmount $ALLOC_SPEC $MYIP`
 
     if [ -z "$VALUE" ]; then
-      # Neither worked
-      echo "$PROG: error: could not automatically get export path for $ALLOC_SPEC" >&2
-      echo "  Instead, provide the full NFS export path (from the QRIScloud Services Portal" >&2
-      echo "  at https://services.qriscloud.org.au), or contact QRIScloud support." >&2
+      cat >&2 <<EOF
+$PROG: error: no NFS export for $ALLOC_SPEC to this machine ($MYIP)
+  Please wait and try again. If this machine was recently launched, it can take
+  up to 5 minutes before the NFS export is available. Also the NFS export might
+  not be found if the NFS server is highly loaded.  If it does not work after a
+  few retries, either specify an explicit NFS export path instead of a Q-number
+  or contact QRIScloud support.
+EOF
       exit 1
     fi
 
