@@ -9,7 +9,6 @@ Synopsis
     q-storage-setup.sh
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
         [ -d | --dir dirname]
-        [ -f | --force yum|apt]
         [ -v | --verbose ]
         [ -V | --version ]
         [ -h | --help ] allocSpec {allocSpec...}
@@ -18,7 +17,7 @@ Description
 -----------
 
 _Don't want to read all this (even though you really should)? Then jump
-straight to the "Examples" section below._
+to the "Examples" section below._
 
 This script simplifies the task of setting up _autofs_, or directly
 mounting/unmounting, QRISdata Collection Storage allocations.
@@ -38,26 +37,16 @@ of these options:
 
 Other options are:
 
+- `-d --dir name` sets the directory containing the mount point. The
+directory must be an absolute directory (i.e. starting with a
+slash). In the mount and unmount modes, the directory must already
+exist; the default of `/mnt` is used if this option is not
+specified. In the autofs mode, the default of `/data` is used if this
+option is not specified.
+
 - `-h | --help` shows help information.
 
 - `-V | --version` shows the scripts version number.
-
-- `-d --dir name` sets the directory containing the mount point. The
-directory must be an absolute directory (i.e. starting with a
-slash). Used in autofs, mount and unmount modes only. For mount and
-unmount modes, the directory must already exist; the default of `/mnt`
-is used if this option is not specified. For autofs mode, the default
-of `/data` is used if this option is not specified.
-
-- `-f | --force pkg` forces use of commands for the given package
-manager type. This script has been tested with particular Linux
-distributions that use the "apt" (e.g. Ubuntu and Debian), "dnf" or
-"yum" package managers (e.g. CentOS and Fedora). It attempts to
-automatically detect which package manager is being used.  If the
-automatic detection fails and/or you want to take the risk of running
-it on an untested distribution, force it to use the commands for a
-particular package manager by using this option with `apt`, `dnf` or
-`yum` as the argument.
 
 - `-v | --verbose` show extra information.
 
@@ -199,17 +188,18 @@ Supported distributions
 This script has been tested on the following distributions (as
 installed from the NeCTAR official images):
 
-- CentOS 6.7 x86_64
+- Fedora 26 x86_64
 - CentOS 7.0 x86_64
-- Debian 8 x86_64 (Jessie)
-- Fedora 22 x86_64
-- Fedora 23 x86_64
-- Scientific Linux 6.7 x86_64 (Carbon)
-- Ubuntu 15.10 (Wily) amd64
-- Ubuntu 16.04 (Xenial) amd64
+- CentOS 6.7 x86_64 (Limitation: MTU is 1500 instead of 9000)
+- Scientific Linux 6.8 x86_64 (Carbon) (Limitation: MTU is 1500 instead of 9000)
 
-It should also work with NeCTAR images for previous versions of these
-distributions too.
+These currently (2018-02-20) do **not** work because of problems with
+network configuration on the instances:
+
+- Ubuntu 14.04 (Trusty) amd64 (Problem: No IPv4 address)
+- Ubuntu 16.04 (Xenial) amd64 (Problem: No IPv4 address)
+- Ubuntu 17.10 (Artful) amd64 (Problem: No IPv4 address)
+- Debian 8 x86_64 (Jessie) (Problem: No IPv4 address)
 
 Files
 -----
@@ -322,7 +312,7 @@ This error occurs on the Fedora images.
 Just re-run the script a second time, with the same parameters, and it
 should work.
 
-### warning: MTU for eth1 is not 9000 bytes
+### warning: eth1: MTU != 9000
 
 The Maximum Transmission Unit (MTU) for the network interface is not
 set to 9000.  This problem usually occurs on Fedora images, which
@@ -404,4 +394,5 @@ specify a different location.
 Contact
 -------
 
-Please send feedback and queries to Hoylen Sue at <h.sue@qcif.edu.au>.
+Please send feedback and queries to Hoylen Sue at <h.sue@qcif.edu.au>
+or raise a ticket with [QRIScloud Support](https://www.qriscloud.org.au/support).

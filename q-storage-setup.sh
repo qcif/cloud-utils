@@ -121,12 +121,11 @@ DO_MOUNT=
 DO_UMOUNT=
 STAGE=
 DIR=
-FORCE=
 
 ## Define options: trailing colon means has an argument
 
-SHORT_OPTS=hd:amufvV
-LONG_OPTS=help,dir:,autofs,mount,umount,force,verbose,version
+SHORT_OPTS=hd:amuvV
+LONG_OPTS=help,dir:,autofs,mount,umount,verbose,version
 
 ALLOC_SPEC_HELP="
 allocSpec = the QRISdata Collection Storage allocation to mount/unmount.
@@ -145,7 +144,6 @@ Options:
   -d name directory containing mount points
           default for autofs: $DEFAULT_AUTO_MOUNT_DIR
           default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR
-  -f pkg  set package manager type (\"apt\", \"dnf\" or \"yum\" )
 
   -v      show extra information
   -V      show version
@@ -206,7 +204,6 @@ while [ $# -gt 0 ]; do
     -m | --mount)    DO_MOUNT=yes;;
     -u | --umount)   DO_UMOUNT=yes;;
     -d | --dir)      DIR="$2"; shift;;
-    -f | --force)    FORCE=yes;;
     -V | --version)  echo "$PROG $VERSION"; exit 0;;
     -v | --verbose)  VERBOSE=yes;;
 
@@ -334,16 +331,12 @@ if [ -n "$ERROR" ]; then
 fi
 
 #----------------------------------------------------------------
-# Check pre-conditions
+# Check OS is supported
 
-if [ -z "$FORCE" ]; then
-  # Check OS is supported
-
-  OS=`uname -s`
-  if [ "$OS" != 'Linux' ]; then
-    echo "$PROG: error: unsupported OS: $OS (use --force if you feel lucky)"
-    exit 1
-  fi
+OS=`uname -s`
+if [ "$OS" != 'Linux' ]; then
+  echo "$PROG: error: unsupported operating system: $OS" >&2
+  exit 1
 fi
 
 #----------------------------------------------------------------
@@ -579,7 +572,13 @@ fi
 # Check MTU packet size
 
 if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-  echo "$PROG: warning: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+  echo "$PROG: warning: eth1: MTU != 9000 (performace may be reduced)" >&2
+
+  # Change this to an error when setting the MTU actually works.
+  # Currently, it does not work on CentOS 6 because the broken DHCP value of 1500
+  # overrides the value in /etc/sysconfig/network-scripts/ifcfg-eth1.
+
+  # echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
   # exit 1
 fi
 
@@ -743,6 +742,8 @@ if [ -n "$DO_UMOUNT" ]; then
   if [ -n "$ERROR" ]; then
     exit 1
   fi
+
+  rm "$LOG"
   exit 0 # done for this mode
 fi
 
@@ -861,6 +862,7 @@ if [ -n "$DO_MOUNT" ]; then
     exit 1
   fi
 
+  rm "$LOG"
   exit 0 # done for this mode
 fi
 
@@ -942,13 +944,12 @@ if [ -n "$VERBOSE" ]; then
 fi
 
 if which systemctl >/dev/null 2>&1; then
-  # Systemd is used
+  # Systemd is used (e.g. CentOS 7)
   systemctl enable autofs.service  >>"$LOG" 2>&1
   systemctl restart autofs.service  >>"$LOG" 2>&1
 else
-  # Init.d is used
+  # Init.d is used (e.g. CentOS 6)
   service autofs restart  >>"$LOG" 2>&1
-  echo "$PROG: warning: using init.d instead of systemd"
 fi
 
 #----------------------------------------------------------------
@@ -981,8 +982,7 @@ fi
 #----------------------------------------------------------------
 # Success
 
-echo "$PROG: done" >>"$LOG"
-
+rm "$LOG"
 exit 0
 
 #----------------------------------------------------------------

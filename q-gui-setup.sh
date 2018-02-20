@@ -83,9 +83,15 @@ if [ -z "$FORCE" ]; then
     echo "$PROG: error: unsupported operating system: $OS (use --force?)"
     exit 1
   fi
-  ISSUE=`head -1 /etc/issue`
+
+  if [ -r '/etc/system-release' ]; then
+    ISSUE=`cat /etc/system-release`
+  else
+    ISSUE=`head -1 /etc/issue`
+  fi
   if [ "$ISSUE" != 'CentOS release 6.4 (Final)' -a \
-       "$ISSUE" != 'Scientific Linux release 6.4 (Carbon)' ]; then
+		"$ISSUE" != 'CentOS release 6.9 (Final)' -a \
+		"$ISSUE" != 'Scientific Linux release 6.4 (Carbon)' ]; then
     echo "$PROG: error: unsupported distribution: $ISSUE (use --force?)"
     exit 1
   fi
