@@ -426,7 +426,7 @@ if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
     # eth1 not configured: create eth1 configuration file
 
     if [ -n "$VERBOSE" ]; then
-      echo "$PROG: creating config file : $ETH1_CFG"
+      echo "$PROG: eth1: creating config file: $ETH1_CFG"
     fi
 
     cat > "$ETH1_CFG" <<EOF
@@ -475,9 +475,11 @@ EOF
       #
       # In early-2018, OpenStack has made a change so using DHCP to set the
       # MTU size does not work. This code is to work around it.
+      #
+      # First, try and set the MTU in the network configuration.
 
       if [ -n "$VERBOSE" ]; then
-        echo "$PROG: DHCP MTU not working: configuring eth1 MTU 9000" >&2
+        echo "$PROG: eth1: MTU DHCP not working: adding MTU 9000 config"
       fi
 
       # Uncomment the MTU configuration lines
@@ -489,6 +491,47 @@ EOF
 
       ifdown eth1  >>"$LOG" 2>&1
       ifup eth1  >>"$LOG" 2>&1
+
+      # Check MTU packet size (after MTU 9000 configuration added)
+
+      if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
+	# MTU is still not 9000: add command to explicitly set it
+	#
+	# The configuration of MTU 9000 did not work. On some
+	# distibutions, the above MTU configuration works (e.g. CentOS
+	# 7 and Fedora 26), but other distributions (e.g. CentOS 6.7
+	# and Scientific Linux 6.8) seem to use the (wrong) MTU value
+	# from DHCP in preference to the value from the
+	# configuration. On these systems, run a command to explicitly
+	# set the MTU to 9000 (below).
+
+	POST_FILE=/etc/sysconfig/network-scripts/ifup-post
+
+	if [ -n "$VERBOSE" ]; then
+          echo "$PROG: eth1: MTU config not working: adding MTU 9000 command to $POST_FILE"
+	fi
+
+	# Append extra commands just before the "exit 0" at the end of the file
+	awk "
+/^exit 0\s*$/ {
+            print \"# Set the MTU to 9000 on eth1 (the QRIScloud private network interface)\"
+            print \"# Added by $PROG on $TIMESTAMP\"
+            print \"if [ \\\"\$REALDEVICE\\\" = \\\"eth1\\\" ]; then\"
+            print \"  /sbin/ip link set \$REALDEVICE mtu 9000\"
+            print \"fi\"
+            print \"\"
+          }
+1 # print all other lines
+" "$POST_FILE" > "${POST_FILE}.tmp$$"
+	chmod 755 "${POST_FILE}.tmp$$"
+	mv "${POST_FILE}.tmp$$" "$POST_FILE"
+
+	# Restart the interface so the command in ifup-post runs
+	# Do not use "ip link set dev eth1 up" since it doesn't use ifup-post
+
+	ifdown eth1  >>"$LOG" 2>&1
+	ifup eth1  >>"$LOG" 2>&1
+      fi
     fi
 
     I_CONFIGURED_ETH1="$ETH1_CFG"
@@ -537,7 +580,7 @@ EOF
       # MTU size does not work. This code is to work around it.
 
       if [ -n "$VERBOSE" ]; then
-        echo "$PROG: DHCP MTP not working: configuring eth1 MTU 9000" >&2
+        echo "$PROG: DHCP MTP not working: configuring eth1 MTU 9000"
       fi
 
       # Uncomment the MTU configuration line
@@ -909,7 +952,7 @@ fi
 DMAP=/etc/auto.qriscloud
 
 if [ -n "$VERBOSE" ]; then
-  echo "$PROG: creating direct map file for autofs: $DMAP"
+  echo "$PROG: configuring autofs: creating direct map file: $DMAP"
 fi
 
 TMP="$DMAP".tmp-$$
@@ -932,7 +975,7 @@ if ! grep -q "^/- file:$DMAP\$" /etc/auto.master; then
   # Add entry to the master map, because it is not yet in there
 
   if [ -n "$VERBOSE" ]; then
-    echo "Modifying /etc/auto.master"
+    echo "$PROG: configuring autofs: modifying /etc/auto.master"
   fi
   echo "/- file:$DMAP" >> /etc/auto.master
 fi
@@ -940,7 +983,7 @@ fi
 # Restart autofs service (so it uses the new configuration)
 
 if [ -n "$VERBOSE" ]; then
-  echo "$PROG: restarting autofs"
+  echo "$PROG: configuring autofs: restarting autofs service"
 fi
 
 if which systemctl >/dev/null 2>&1; then
