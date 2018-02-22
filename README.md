@@ -2,8 +2,10 @@ QRIScloud utilities
 ===================
 
 Utilities for working with the QRIScloud virtual machine instances and
-data storage.  QRIScloud is a set of services provided by the
-_Queensland Cyber Infrastructure Foundation_
+data storage.
+
+[QRIScloud](https://www.qriscloud.org.au) is a set of services
+provided by the _Queensland Cyber Infrastructure Foundation_
 ([QCIF](http://www.qcif.edu.au)).
 
 Scripts
@@ -11,17 +13,18 @@ Scripts
 
 ### [q-storage-setup](q-storage-setup.md)
 
-Connects QRIScloud compute to storage.  Setup a NFS client in a NeCTAR
-virtual machine instance to mount RDSI storage.
-
-### [q-gui-setup](q-gui-setup.md)
-
-Setup X-Windows plus a VNC server.
+Setup a NFS client in a Nectar virtual machine instance to mount
+QRISdata Collection Storage allocations.  The VM instance must be
+running in the _QRIScloud_ availability zone.
 
 ### [q-image-create](q-image-create.md)
 
-Utility to help with the process of creating a virtual machine image
-for NeCTAR.
+Utility to help with the process of creating a virtual machine images
+for Nectar.
+
+For example, if you want to instantiate a virtual machine instance
+with a different operating system: one that someone else has not
+created a Nectar image for you to use.
 
 Licence
 -------
