@@ -20,10 +20,11 @@ _Don't want to read all this (even though you really should)? Then jump
 to the "Examples" section below._
 
 This script simplifies the task of setting up _autofs_, or directly
-mounting/unmounting, QRISdata Collection Storage allocations.
-Allocations can be specified by the NFS path or by the allocation's
-Q-number. If a Q-number is provided, the script automatically
-determines the NFS path to use.
+mounting/unmounting, QRISdata Collection Storage allocations (both
+allocations with _frequent access_ and _MeDiCI_ storage).  Allocations
+can be specified by the NFS path or by the allocation's Q-number. If a
+Q-number is provided, the script automatically determines the NFS path
+to use.
 
 This script operates in one of three modes. The mode is set by using one
 of these options:
@@ -58,8 +59,7 @@ Portal, listed under the allocation in the "My Services" section
 
 **Note:** The first time this script is used, it might take a few minutes to
 run. This is because it needs to download and install the dependent
-packages. Use verbose mode to see an indication of progress as it is
-running.
+packages.
 
 ### Configure autofs mode
 
@@ -173,39 +173,52 @@ rebooted. It might get automatically unmounted if it has not been used
 for a while, so don't be surprised if it does not appear under
 "/data". But it will automatically get re-mounted when it is accessed.
 
+If there are multiple allocations to mount, specify them all.
+For example:
+
+    $ sudo ./q-storage-setup Q0039 Q0224
+
 Environment
 -----------
 
 This script must be run with root privileges.
 
-You might want to update existing packages before running this
+You should update existing packages before running this
 script. On YUM-based distributions, run "yum update". On APT-based
 distributions, run "apt-get update".
 
 Supported distributions
 -----------------------
 
-This script has been tested on the following distributions (as
-installed from the NeCTAR official images):
+This script has been tested on the following official Nectar images
+(as released on 22 February 2018):
 
-- Fedora 26 x86_64
-- CentOS 7.0 x86_64
-- CentOS 6.7 x86_64 (Limitation: MTU is 1500 instead of 9000)
-- Scientific Linux 6.8 x86_64 (Carbon) (Limitation: MTU is 1500 instead of 9000)
+- CentOS 6.7
+- CentOS 7.0
+- Debian 7 (Wheezy)
+- Debian 8 (Jessie)
+- Debian 9 (Stretch)
+- Fedora 26
+- Scientific Linux 6.8 (Carbon)
+- Ubuntu 14.04 (Trusty)
+- Ubuntu 16.04 (Xenial)
+- Ubuntu 17.10 (Artful)
 
-These currently (2018-02-20) do **not** work because of problems with
-network configuration on the instances:
+The script does not work on the following Nectar official image:
 
-- Ubuntu 14.04 (Trusty) amd64 (Problem: No IPv4 address)
-- Ubuntu 16.04 (Xenial) amd64 (Problem: No IPv4 address)
-- Ubuntu 17.10 (Artful) amd64 (Problem: No IPv4 address)
-- Debian 8 x86_64 (Jessie) (Problem: No IPv4 address)
+- openSUSE Leap 42.3
+
+This script is provided on an as-is basis. There is no guarantee it
+will work on any platform. In the face of changes/updates, there is
+also no guarantee it will continue to work on platforms where it
+had previously worked.
 
 Files
 -----
 
 - `/etc/auto.qriscloud` - direct map file created with mount information.
 - `/etc/auto.master` - configuration file for _autofs_.
+- `/tmp/q-storage-setup.sh-*.log` - log file, not deleted if an error occurs.
 
 Diagnosis
 ---------
@@ -220,7 +233,7 @@ one exists.
 
 ### eth1 not found: not running on a QRIScloud virtual machine?
 
-QRISdata Collection Storage allocations can only be NFS mounted from
+QRISdata Collection Storage allocations can **only** be NFS mounted from
 virtual machine instances running in QRIScloud (i.e. the "QRIScloud"
 NeCTAR availability zone).
 
@@ -228,21 +241,32 @@ The virtual machine is not running in QRIScloud, so it cannot mount
 any QRISdata Collection Storage allocations. Use a virtual machine
 instance in "QRIScloud" and run the script from there.
 
-### error: autofs configured, but failed to mount
+### error: autofs configured, but didn't mount
 
 The autofs was successfully configured, but the mount does not work.
 
-Try _ad hoc_ mounting the storage (i.e. without using autofs), and see
-what error message appears:
+This can happen if the NFS server is heavily loaded. It is a shared
+resource and other users might be putting a heavy load on the server.
+Try again at a later time.
 
-    ./q-storage-setup.sh --mount Q...
+If the script was invoked with the NFS mount path (instead of just the
+Q-number) for the allocation, there could be a problem with the NFS
+mount path. Check if the value is correct and that the virtual machine
+is running in the correct Nectar project. If the script was invoked
+with the Q-number, it looks up the NFS mount path so it is unlikely to
+be incorrect.
 
-The most common cause is the virtual machine instance has not been
-given permission to mount that particular storage allocation. If that
-is the case, see "mount.nfs: access denied by server while
-mounting..." below.
+### Diagnosing problems with autofs
 
-Alternatively, use the logging feature of _autofs_:
+By default, _autofs_ error message are suppressed, which makes
+diagnosing problems difficult.
+
+To see error messages, try _ad hoc_ mounting the storage (i.e. without
+using autofs):
+
+    ./q-storage-setup.sh --mount ...
+
+Alternatively, enable the logging feature of _autofs_:
 
 1. Add `OPTIONS="--debug"` to the _/etc/sysconfig/autofs_ file.
 2. Restart _autofs_.
@@ -282,12 +306,11 @@ mounting..." below.
 
 ### mount.nfs: access denied by server while mounting...
 
-This error is printed out when performing an _ad hoc_ mount and the
-virtual machine instance does not have permission to mount the
-particular storage allocation.
+This error occurs when the virtual machine instance does not have
+permission to mount the particular storage allocation.
 
-First, check the allocation allocation specification is correct; and
-the virtual machine is running in the correct NeCTAR project.
+First, check the allocation specification is correct; and the virtual
+machine is running in the correct NeCTAR project.
 
 Secondly, if the VM instance was instantiated less than 5 minutes ago,
 the permissions might not have been applied to it. Wait up to 5
@@ -312,42 +335,26 @@ This error occurs on the Fedora images.
 Just re-run the script a second time, with the same parameters, and it
 should work.
 
-### warning: eth1: MTU != 9000
+### error: eth1: MTU != 9000
 
 The Maximum Transmission Unit (MTU) for the network interface is not
-set to 9000.  This problem usually occurs on Fedora images, which
-don't seem to be setup to use the MTU information provided by DHCP.
+set to 9000. This reduces the performance of the NFS mount.
 
-The NFS mount will still work, but it will not work as fast as it could
-if the MTU was set to 9000 (a.k.a. "jombo frames").
-
-Explicitly set it by editing the network interface configuration file
-(for RHEL systems, edit _/etc/sysconfig/network-scripts/ifcfg-eth1_;
-for ubuntu systems, edit _/etc/network/interfaces_) and then restart
-the interface for the changes to take effect (`ifdown eth1; ifup
-eth1`).
-
-Show the MTU for eth1:
+The MTU for eth1 can be shown using:
 
     ip link show dev eth1
 
+Please contact QRIScloud support, because this problem indicates
+something has changed in OpenStack or the Nectar images and the script
+needs to be updated.
+
+
 ### Cannot ping NFS server
 
-Check the second network interface (usually eth1) on the virtual
-machine instance has been activated and has been assigned a 10.255.x.x
-IP address.
+Cannot contact one or more of the NFS servers. This might be because
+that NFS server is down or it is heavily loaded.
 
-    ip -f inet addr
-
-If it does not have an IP address, check the network interface
-configuration files or run the DHCP client:
-
-    sudo dhclient eth1
-
-This script should have automatically set up the second network
-interface, but obviously that failed: please report this as a bug.
-
-### warning: NetworkManager installed, consider uninstalling it
+### NetworkManager
 
 NetworkManager is a daemon that dynamically configures the network
 interfaces.  It is useful for environments where the network
@@ -355,6 +362,7 @@ configuration changes (e.g. wi-fi networks that comes and goes), but
 not so useful for staic environments (such as NeCTAR VM instances). In
 the past, NetworkManager has been the cause of seemingly-random
 network changes, which breaks the network connectivity of the VM.
+
 Consider uninstalling NetworkManager, if you don't need it.
 
     sudo rpm -e NetworkManager

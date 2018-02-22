@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=3.4.0
+VERSION=4.0.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -38,6 +38,8 @@ NFS_SERVERS="10.255.120.200 10.255.120.226 10.255.122.70"
 
 PROG=`basename "$0"`
 
+# Log file where output from commands are redirected.
+# This is used because apt-get is noisy, even in quiet mode!
 LOG="/tmp/${PROG}-$$.log"
 
 trap "echo $PROG: command failed: aborted (see $LOG); exit 3" ERR
@@ -407,10 +409,7 @@ I_CONFIGURED_ETH1=
 
 if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
 
-  # The "net-tools" package has been deprecated by some distributions
-  # (e.g. Ubuntu 17.10) so the ifconfig/ifup/ifdown commands are not
-  # installed by default. But (so far) CentOS still has them installed.
-
+  # Check: all supported distributions of CentOS/Fedora have ifup/ifdown
   if ! which ifup >/dev/null 2>&1; then
     echo "$PROG: error: command not found: ifup" >&2
     exit 1
@@ -419,6 +418,8 @@ if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
     echo "$PROG: error: command not found: ifdown" >&2
     exit 1
   fi
+
+  # Configure eth1
 
   ETH1_CFG=/etc/sysconfig/network-scripts/ifcfg-eth1
 
@@ -537,8 +538,26 @@ EOF
     I_CONFIGURED_ETH1="$ETH1_CFG"
   fi
 
+  #----------------
 elif [ "$FLAVOUR" = 'apt' ]; then
-  # Older Ubuntu
+
+  # Need ifup/ifdown, which is not installed by default in newer distributions
+  # (e.g. Ubuntu 17.10). Need to use them because 'ip link set dev eth1 up'
+  # does not read the config files.
+
+  if ! which ifup >/dev/null 2>&1; then
+    # Install ifup/ifdown
+    apt-get -y --no-upgrade install "ifupdown" >>"$LOG" 2>&1
+  fi
+  if ! which ifup >/dev/null 2>&1; then
+    echo "$PROG: error: command not found: ifup" >&2
+    exit 1
+  fi
+  if ! which ifdown >/dev/null 2>&1; then
+    echo "$PROG: error: command not found: ifdown" >&2
+    exit 1
+  fi
+
 
   IF_FILE=/etc/network/interfaces
 
@@ -568,8 +587,9 @@ iface eth1 inet dhcp
 EOF
 
     # Bring up the interface
+    # Do not use "ip link set dev eth1 ...": it does not get the IPv4 address
 
-    ip link set dev eth1 up  >>"$LOG" 2>&1
+    ifup eth1  >>"$LOG" 2>&1
 
     # Check MTU packet size
 
@@ -580,7 +600,7 @@ EOF
       # MTU size does not work. This code is to work around it.
 
       if [ -n "$VERBOSE" ]; then
-        echo "$PROG: DHCP MTP not working: configuring eth1 MTU 9000"
+        echo "$PROG: eth1: DHCP MTU not working: configuring MTU 9000"
       fi
 
       # Uncomment the MTU configuration line
@@ -588,9 +608,10 @@ EOF
       sed -i 's/^# *\(post-up.*mtu 9000\) *$/\1/' "$IF_FILE"
 
       # Restart the interface to use MTU 9000 configuration
+      # Do not use "ip link set dev eth1 ...": it does not get the IPv4 address
 
-      ip link set dev eth1 down  >>"$LOG" 2>&1
-      ip link set dev eth1 up  >>"$LOG" 2>&1
+      ifdown eth1  >>"$LOG" 2>&1
+      ifup eth1  >>"$LOG" 2>&1
     fi
 
     I_CONFIGURED_ETH1="$IF_FILE"
@@ -601,28 +622,19 @@ else
   exit 3
 fi
 
-# Get the eth1 IPv4 address
+# Check MTU packet size
+
+if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
+  echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+  exit 1
+fi
+
+# Get the eth1 IPv4 address (it will be needed to lookup the NFS export path)
 
 MYIP=`ip addr show dev eth1 scope global | grep 'inet ' | sed 's/^ *inet \(.*\)\/.*/\1/'`
 if [ -z "$MYIP" ]; then
   echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
   exit 1
-fi
-if [ -n "$VERBOSE" ]; then
-  echo "$PROG: eth1 IPv4 address: $MYIP"
-fi
-
-# Check MTU packet size
-
-if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-  echo "$PROG: warning: eth1: MTU != 9000 (performace may be reduced)" >&2
-
-  # Change this to an error when setting the MTU actually works.
-  # Currently, it does not work on CentOS 6 because the broken DHCP value of 1500
-  # overrides the value in /etc/sysconfig/network-scripts/ifcfg-eth1.
-
-  # echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
-  # exit 1
 fi
 
 #----------------------------------------------------------------
@@ -701,12 +713,18 @@ for ALLOC_SPEC in "$@"; do
     if [ -z "$VALUE" ]; then
       cat >&2 <<EOF
 $PROG: error: no export for $ALLOC_SPEC to this machine ($MYIP)
-  Check this machine is running in the Nectar project nominated for NFS access.
-  If it is, please wait and try again. It can take up to 5 minutes after
-  launching for the NFS export to be available, and automatically getting the
-  NFS export path can be unreliable if the NFS server is highly loaded.
-  If it does not work after a few retries, either specify an explicit NFS
-  export path instead of a Q-number, or contact QRIScloud support.
+
+  CHECK this machine is running in the Nectar project nominated for NFS access.
+
+  If it is, PLEASE WAIT AND TRY AGAIN. Looking up the NFS export path
+  does not always work if the NFS server is highly loaded.  Also, it
+  can take up to 5 minutes after launching for the NFS export to be
+  available.
+
+  If it does not work after a few retries, either specify the NFS export path
+  (which can be found on https://services.qriscloud.org.au) instead of just
+  "${ALLOC_SPEC}", or contact QRIScloud support.
+
 EOF
       exit 1
     fi
@@ -725,7 +743,7 @@ EOF
   fi
 
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: mount path: $VALUE"
+    echo "$PROG: mount: $VALUE"
   fi
 
   # Append to list
@@ -952,7 +970,7 @@ fi
 DMAP=/etc/auto.qriscloud
 
 if [ -n "$VERBOSE" ]; then
-  echo "$PROG: configuring autofs: creating direct map file: $DMAP"
+  echo "$PROG: configuring autofs: creating direct map: $DMAP"
 fi
 
 TMP="$DMAP".tmp-$$
@@ -975,7 +993,7 @@ if ! grep -q "^/- file:$DMAP\$" /etc/auto.master; then
   # Add entry to the master map, because it is not yet in there
 
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: configuring autofs: modifying /etc/auto.master"
+    echo "$PROG: configuring autofs: modifying master: /etc/auto.master"
   fi
   echo "/- file:$DMAP" >> /etc/auto.master
 fi
@@ -983,7 +1001,7 @@ fi
 # Restart autofs service (so it uses the new configuration)
 
 if [ -n "$VERBOSE" ]; then
-  echo "$PROG: configuring autofs: restarting autofs service"
+  echo "$PROG: configuring autofs: autofs service: restarting..."
 fi
 
 if which systemctl >/dev/null 2>&1; then
@@ -993,6 +1011,10 @@ if which systemctl >/dev/null 2>&1; then
 else
   # Init.d is used (e.g. CentOS 6)
   service autofs restart  >>"$LOG" 2>&1
+fi
+
+if [ -n "$VERBOSE" ]; then
+  echo "$PROG: configuring autofs: autofs service: restarted"
 fi
 
 #----------------------------------------------------------------
@@ -1007,10 +1029,6 @@ for NFS_EXPORT in $EXPORT_PATHS; do
   if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
     echo "$PROG: failed to mount: $DIR/$ALLOC" >>"$LOG"
     echo "$PROG: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
-    echo "  This could be because this VM does not have permission to" >&2
-    echo "  NFS mount $ALLOC. Please check it is running in the correct" >&2
-    echo "  Nectar project that was nominated for NFS access." >&2
-    echo "  If the problem persists, please contact QRIScloud Support." >&2
     ERROR=yes
   else
     echo "$PROG: autofs mount successful: $DIR/$ALLOC" >>"$LOG"
@@ -1019,14 +1037,23 @@ for NFS_EXPORT in $EXPORT_PATHS; do
 done
 
 if [ -n "$ERROR" ]; then
-  exit 1
+  # Unsuccessful: leave log file
+    cat >&2 <<EOF
+  Failures to mount could be because the NFS server is highly loaded.
+  If the problem persists, please contact QRIScloud Support.
+EOF
 fi
 
 #----------------------------------------------------------------
-# Success
+# Clean up and exit
 
 rm "$LOG"
-exit 0
+
+if [ -n "$ERROR" ]; then
+  exit 1
+else
+  exit 0
+fi
 
 #----------------------------------------------------------------
 #EOF
