@@ -3,7 +3,7 @@ q-gui-setup
 
 **This script is no longer being maintained. It only works with CentOS
 6.4, CentOS 6.9 and Scientific Linux 6.4.  It won't work with CentOS
-7, because there has significantly changes. If you are interested in
+7, because there has been significant changes. If you are interested in
 helping update this script, please contact QRIScloud Support.**
 
 Setup X11 and VNC servers on to run a graphical user interface on
