@@ -191,7 +191,7 @@ Supported distributions
 -----------------------
 
 This script has been tested on the following official Nectar images
-(as released on 22 February 2018):
+(as released on 11 May 2018):
 
 - CentOS 6.7
 - CentOS 7.0
@@ -203,6 +203,7 @@ This script has been tested on the following official Nectar images
 - Ubuntu 14.04 (Trusty)
 - Ubuntu 16.04 (Xenial)
 - Ubuntu 17.10 (Artful)
+- Ubuntu 18.04 (Bionic)
 
 The script does not work on the following Nectar official image:
 
