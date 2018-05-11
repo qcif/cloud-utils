@@ -19,13 +19,13 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=4.0.0
+VERSION=4.1.0
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
 
 # Note: use NFS v3; NFS v4 does not work on tier2 NFS
-MOUNT_OPTIONS="rw,nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
+MOUNT_OPTIONS_BASE="nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 MOUNT_OPTIONS_DNF_YUM=nolock
 MOUNT_OPTIONS_APT=
 
@@ -121,13 +121,14 @@ VERBOSE=
 DO_AUTOFS=
 DO_MOUNT=
 DO_UMOUNT=
+READ_ONLY=
 STAGE=
 DIR=
 
 ## Define options: trailing colon means has an argument
 
-SHORT_OPTS=hd:amuvV
-LONG_OPTS=help,dir:,autofs,mount,umount,verbose,version
+SHORT_OPTS=hd:amurvV
+LONG_OPTS=help,dir:,autofs,mount,umount,read-only,verbose,version
 
 ALLOC_SPEC_HELP="
 allocSpec = the QRISdata Collection Storage allocation to mount/unmount.
@@ -143,6 +144,7 @@ Options:
   -m      perform ad hoc mount
   -u      perform ad hoc unmount
 
+  -r      mount in read-only mode (default: read-write)
   -d name directory containing mount points
           default for autofs: $DEFAULT_AUTO_MOUNT_DIR
           default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR
@@ -159,6 +161,7 @@ Options:
   -m | --mount      perform ad hoc mount
   -u | --umount     perform ad hoc unmount
 
+  -r | --read-only  mount in read-only mode (default: read-write)
   -d | --dir name   directory containing mount points
                     default for autofs: $DEFAULT_AUTO_MOUNT_DIR
                     default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR
@@ -205,6 +208,7 @@ while [ $# -gt 0 ]; do
     -a | --autofs)   DO_AUTOFS=yes;;
     -m | --mount)    DO_MOUNT=yes;;
     -u | --umount)   DO_UMOUNT=yes;;
+    -r | --read-only) READ_ONLY=yes;;
     -d | --dir)      DIR="$2"; shift;;
     -V | --version)  echo "$PROG $VERSION"; exit 0;;
     -v | --verbose)  VERBOSE=yes;;
@@ -360,6 +364,8 @@ fi
 #----------------------------------------------------------------
 # Set the mount options to use
 
+MOUNT_OPTIONS="$MOUNT_OPTIONS_BASE"
+
 if [ $FLAVOUR = 'dnf' ]; then
   MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_DNF_YUM"
 elif [ $FLAVOUR = 'yum' ]; then
@@ -369,6 +375,12 @@ elif [ $FLAVOUR = 'apt' ]; then
 else
   echo "$PROG: internal error: unknown flavour: $FLAVOUR" >&2
   exit 3
+fi
+
+if [ -z "$READ_ONLY" ]; then
+  MOUNT_OPTIONS="rw,$MOUNT_OPTIONS"
+else
+  MOUNT_OPTIONS="ro,$MOUNT_OPTIONS"
 fi
 
 #----------------------------------------------------------------

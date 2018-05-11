@@ -8,6 +8,7 @@ Synopsis
 
     q-storage-setup.sh
         [ -a | --autofs] [ -m | --mount ] [ -u | --umount ]
+        [ -r | --read-only]
         [ -d | --dir dirname]
         [ -v | --verbose ]
         [ -V | --version ]
@@ -38,7 +39,10 @@ of these options:
 
 Other options are:
 
-- `-d --dir name` sets the directory containing the mount point. The
+- `-r | --read-only` mount in read-only mode, instead of the default
+of read-write mode.
+
+- `-d | --dir name` sets the directory containing the mount point. The
 directory must be an absolute directory (i.e. starting with a
 slash). In the mount and unmount modes, the directory must already
 exist; the default of `/mnt` is used if this option is not
@@ -399,6 +403,10 @@ autofs restart`).
 Ad hoc mounts are created by default under _/mnt_, which is the
 ephemeral disk on NeCTAR VM instances. Use the `--dir` option to
 specify a different location.
+
+Knowm limitation: if the read-only option is used and there are
+multiple allocations specified, it is applied to all of them.
+This is not a problem if only one allocation is specified.
 
 Contact
 -------
