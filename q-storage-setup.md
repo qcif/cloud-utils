@@ -195,10 +195,24 @@ Supported distributions
 -----------------------
 
 This script has been tested on the following official Nectar images
-(as released on 11 May 2018):
+that were available on 23 January 2019:
+
+- CentOS 7.0
+- Ubuntu 18.04 (Bionic) LTS
+- Fedora 29
+
+This script is provided on an as-is basis. There is no guarantee it
+will work on any platform. There is also no guarantee it will continue
+to work on platforms where it had previously worked, since they are
+sometimes updated.
+
+A previous version of this script was tested on the following official
+Nectar images on 11 May 2018. The script may or may not still work
+with them. If you encounter problems on these other distributions,
+either use one of the above distributions or contact QRIScloud
+Support.
 
 - CentOS 6.7
-- CentOS 7.0
 - Debian 7 (Wheezy)
 - Debian 8 (Jessie)
 - Debian 9 (Stretch)
@@ -207,16 +221,10 @@ This script has been tested on the following official Nectar images
 - Ubuntu 14.04 (Trusty)
 - Ubuntu 16.04 (Xenial)
 - Ubuntu 17.10 (Artful)
-- Ubuntu 18.04 (Bionic)
 
-The script does not work on the following Nectar official image:
+The script has never worked on the following Nectar image:
 
 - openSUSE Leap 42.3
-
-This script is provided on an as-is basis. There is no guarantee it
-will work on any platform. In the face of changes/updates, there is
-also no guarantee it will continue to work on platforms where it
-had previously worked.
 
 Files
 -----

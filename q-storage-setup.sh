@@ -3,7 +3,7 @@
 # Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
 # instances.
 #
-# Copyright (C) 2013-2018 Queensland Cyber Infrastructure Foundation Ltd.
+# Copyright (C) 2013-2019 Queensland Cyber Infrastructure Foundation Ltd.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=4.1.0
+VERSION=4.1.1
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -42,7 +42,7 @@ PROG=`basename "$0"`
 # This is used because apt-get is noisy, even in quiet mode!
 LOG="/tmp/${PROG}-$$.log"
 
-trap "echo $PROG: command failed: aborted (see $LOG); exit 3" ERR
+trap "echo $PROG: aborted \(see $LOG for details\); exit 3" ERR
 # Can't figure out which command failed? Run using "bash -x" or uncomment:
 #   set -x # write each command to stderr before it is exceuted
 
@@ -223,6 +223,13 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Determine action
+
+if [ -z "$DO_MOUNT" -a -z "$DO_UMOUNT" -a -z "$DO_AUTOFS" ]; then
+  # No action specified: default to autofs
+  DO_AUTOFS=yes
+fi
+
 if [ -n "$DO_MOUNT" -a -n "$DO_UMOUNT" ]; then
   echo "$PROG: usage error: cannot use --mount and --umount together" >&2
   exit 2
@@ -236,10 +243,23 @@ if [ -n "$DO_AUTOFS" -a -n "$DO_UMOUNT" ]; then
   exit 2
 fi
 
+# Set the ACTION. After this point, the script does not use the DO_* variables.
+
+if [ -n "$DO_AUTOFS" ]; then
+  ACTION=autofs
+elif [ -n "$DO_MOUNT" ]; then
+  ACTION=mount
+elif [ -n "$DO_UMOUNT" ]; then
+  ACTION=umount
+else
+  echo "$PROG: internal error: no action" >&2
+  exit 3
+fi
+
 # Use default directories (if explicit directory not specified)
 
-if [ -n "$DO_MOUNT" -o -n "$DO_UMOUNT" ]; then
-  # Mount or unmount mode
+if [ $ACTION = 'mount' -o $ACTION = 'umount' ]; then
+  # Mount or unmount
   if [ -z "$DIR" ]; then
     DIR="$DEFAULT_ADHOC_MOUNT_DIR"
   fi
@@ -252,7 +272,7 @@ if [ -n "$DO_MOUNT" -o -n "$DO_UMOUNT" ]; then
     exit 1
   fi
 else
-  # Automount mode
+  # Automount
   if [ -z "$DIR" ]; then
     DIR="$DEFAULT_AUTO_MOUNT_DIR"
   fi
@@ -337,6 +357,9 @@ if [ -n "$ERROR" ]; then
 fi
 
 #----------------------------------------------------------------
+# Basic checks before it starts doing anything
+
+#----------------
 # Check OS is supported
 
 OS=`uname -s`
@@ -345,7 +368,7 @@ if [ "$OS" != 'Linux' ]; then
   exit 1
 fi
 
-#----------------------------------------------------------------
+#----------------
 # Detect package manager
 
 FLAVOUR=
@@ -361,29 +384,7 @@ else
   exit 1
 fi
 
-#----------------------------------------------------------------
-# Set the mount options to use
-
-MOUNT_OPTIONS="$MOUNT_OPTIONS_BASE"
-
-if [ $FLAVOUR = 'dnf' ]; then
-  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_DNF_YUM"
-elif [ $FLAVOUR = 'yum' ]; then
-  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_DNF_YUM"
-elif [ $FLAVOUR = 'apt' ]; then
-  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_APT"
-else
-  echo "$PROG: internal error: unknown flavour: $FLAVOUR" >&2
-  exit 3
-fi
-
-if [ -z "$READ_ONLY" ]; then
-  MOUNT_OPTIONS="rw,$MOUNT_OPTIONS"
-else
-  MOUNT_OPTIONS="ro,$MOUNT_OPTIONS"
-fi
-
-#----------------------------------------------------------------
+#----------------
 # Check for existance of private network interface
 
 # Note: it is assumed that all supported distributions have the "ip" command
@@ -399,7 +400,7 @@ if ! ip link show dev eth1 >/dev/null; then
   exit 1
 fi
 
-#----------------------------------------------------------------
+#----------------
 # Check if runing with root privileges
 
 if [ `id -u` != '0' ]; then
@@ -415,21 +416,211 @@ TIMESTAMP=`date '+%F %T %:z'`
 echo "$PROG: $TIMESTAMP" >>"$LOG" 2>&1
 
 #----------------------------------------------------------------
+# Install packages (if they are not already installed)
+
+if [ $ACTION != 'umount' ]; then
+  # Not doing unmount (i.e. doing mount or autofs)
+  # Check and install NFS client and ifup/ifdown
+  #
+  # Don't do this if unmounting, since it is assumed the script has already
+  # been run at least once (to mount it) and therefore these packages have
+  # already been installed.
+  
+  #----------------
+  # Install NFS client
+  
+  if [ "$FLAVOUR" = 'dnf' ]; then
+  
+    # nfs-utils
+    if ! rpm -q nfs-utils > /dev/null; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: nfs-utils"
+      fi
+      dnf -y install "nfs-utils" >>"$LOG" 2>&1
+    fi
+  
+  elif [ "$FLAVOUR" = 'yum' ]; then
+  
+    # nfs-utils
+    if ! rpm -q nfs-utils > /dev/null; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: nfs-utils"
+      fi
+      yum -y install "nfs-utils" >>"$LOG" 2>&1
+    fi
+  
+  elif [ "$FLAVOUR" = 'apt' ]; then
+  
+    # nfs-common
+    if ! dpkg-query --status "nfs-common"  >/dev/null 2>&1; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: nfs-common"
+      fi
+      apt-get -y --no-upgrade install "nfs-common" >>"$LOG" 2>&1
+    fi
+  
+  else
+    echo "$PROG: internal error: bad install flavour: $FLAVOUR" >&2
+    rm "$LOG"
+    exit 3
+  fi
+  
+  #----------------
+  # Install ifup and ifdown
+  
+  if [ "$FLAVOUR" = 'yum' ]; then
+
+    # Check: all supported distributions of CentOS have ifup/ifdown
+    if ! which ifup >/dev/null 2>&1; then
+      echo "$PROG: error: command not found: ifup" >&2
+      rm "$LOG"
+      exit 1
+    fi
+    if ! which ifdown >/dev/null 2>&1; then
+      echo "$PROG: error: command not found: ifdown" >&2
+      rm "$LOG"
+      exit 1
+    fi
+
+  elif [ "$FLAVOUR" = 'dnf' ]; then
+
+    # Check: some supported distributions of Fedora have ifup/ifdown some don't
+    if ! which ifup >/dev/null 2>&1; then
+      # Starting with Fedora 29, ifup and ifdown is a legacy network script
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: network-scripts"
+      fi
+      dnf -y install "network-scripts" >>"$LOG" 2>&1
+    fi
+    if ! which ifdown >/dev/null 2>&1; then
+      echo "$PROG: error: command not found: ifdown" >&2
+      rm "$LOG"
+      exit 1
+    fi
+    
+  elif [ "$FLAVOUR" = 'apt' ]; then
+  
+    # Need ifup/ifdown
+
+    # It is not installed by default in newer distributions
+    # (e.g. Ubuntu 17.10). Need to use them because 'ip link set dev eth1 up'
+    # does not read the config files.
+
+    if ! dpkg-query --status "ifupdown"  >/dev/null 2>&1; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: ifupdown"
+      fi
+      apt-get -y --no-upgrade install "ifupdown" >>"$LOG" 2>&1
+    fi
+
+    if ! which ifup >/dev/null 2>&1; then
+      echo "$PROG: error: ifupdown: command not found: ifup" >&2
+      rm "$LOG"
+      exit 1
+    fi
+    if ! which ifdown >/dev/null 2>&1; then
+      echo "$PROG: error: ifupdown: command not found: ifdown" >&2
+      rm "$LOG"
+      exit 1
+    fi
+  
+  else
+    echo "$PROG: internal error: bad install flavour: $FLAVOUR" >&2
+    rm "$LOG"
+    exit 3
+  fi
+fi
+
+#----------------
+# Install autofs automounter
+
+# yum -y $QUIET_FLAG update
+# apt-get update
+
+if [ $ACTION = 'autofs' ]; then
+  # Doing autofs: check and install autofs package.
+  #
+  # Note: don't install autofs if user only wants to use ad hoc mounting.
+  # No sense installing autofs if they might not want it.
+
+  if [ "$FLAVOUR" = 'dnf' ]; then
+  
+    # Install autofs
+  
+    if ! rpm -q autofs > /dev/null; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: autofs"
+      fi
+      dnf -y install "autofs" >>"$LOG" 2>&1
+    fi
+  
+  elif [ "$FLAVOUR" = 'yum' ]; then
+  
+    # Install autofs
+  
+    if ! rpm -q autofs > /dev/null; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: autofs"
+      fi
+      yum -y install "autofs" >>"$LOG" 2>&1
+    fi
+  
+  elif [ "$FLAVOUR" = 'apt' ]; then
+  
+    # Install autofs
+
+    if ! dpkg-query --status "autofs"  >/dev/null 2>&1; then
+      # Package not installed: install it
+      if [ -n "$VERBOSE" ]; then
+	echo "$PROG: installing package: autofs"
+      fi
+      apt-get -y --no-upgrade install "autofs" >>"$LOG" 2>&1
+    fi
+  
+  else
+    echo "$PROG: internal error: bad install flavour: $FLAVOUR" >&2
+    rm "$LOG"
+    exit 3
+  fi
+fi
+
+#----------------------------------------------------------------
+# Set the mount options to use
+
+MOUNT_OPTIONS="$MOUNT_OPTIONS_BASE"
+
+if [ $FLAVOUR = 'dnf' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_DNF_YUM"
+elif [ $FLAVOUR = 'yum' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_DNF_YUM"
+elif [ $FLAVOUR = 'apt' ]; then
+  MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_APT"
+else
+  echo "$PROG: internal error: unknown flavour: $FLAVOUR" >&2
+  rm "$LOG"
+  exit 3
+fi
+
+if [ -z "$READ_ONLY" ]; then
+  MOUNT_OPTIONS="rw,$MOUNT_OPTIONS"
+else
+  MOUNT_OPTIONS="ro,$MOUNT_OPTIONS"
+fi
+
+echo "$PROG: mount options: $MOUNT_OPTIONS" >>"$LOG"
+
+#----------------------------------------------------------------
 # Configure private network interface
 
 I_CONFIGURED_ETH1=
 
 if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
-
-  # Check: all supported distributions of CentOS/Fedora have ifup/ifdown
-  if ! which ifup >/dev/null 2>&1; then
-    echo "$PROG: error: command not found: ifup" >&2
-    exit 1
-  fi
-  if ! which ifdown >/dev/null 2>&1; then
-    echo "$PROG: error: command not found: ifdown" >&2
-    exit 1
-  fi
 
   # Configure eth1
 
@@ -553,28 +744,11 @@ EOF
   #----------------
 elif [ "$FLAVOUR" = 'apt' ]; then
 
-  # Need ifup/ifdown, which is not installed by default in newer distributions
-  # (e.g. Ubuntu 17.10). Need to use them because 'ip link set dev eth1 up'
-  # does not read the config files.
-
-  if ! which ifup >/dev/null 2>&1; then
-    # Install ifup/ifdown
-    apt-get -y --no-upgrade install "ifupdown" >>"$LOG" 2>&1
-  fi
-  if ! which ifup >/dev/null 2>&1; then
-    echo "$PROG: error: command not found: ifup" >&2
-    exit 1
-  fi
-  if ! which ifdown >/dev/null 2>&1; then
-    echo "$PROG: error: command not found: ifdown" >&2
-    exit 1
-  fi
-
-
   IF_FILE=/etc/network/interfaces
 
   if [ ! -f "$IF_FILE" ]; then
     echo "$PROG: file missing: $IF_FILE" >&2
+    rm "$LOG"
     exit 1
   fi
 
@@ -631,6 +805,7 @@ EOF
 
 else
   echo "$PROG: internal error" >&2
+  rm "$LOG"
   exit 3
 fi
 
@@ -638,6 +813,7 @@ fi
 
 if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
   echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+  rm "$LOG"
   exit 1
 fi
 
@@ -646,16 +822,19 @@ fi
 MYIP=`ip addr show dev eth1 scope global | grep 'inet ' | sed 's/^ *inet \(.*\)\/.*/\1/'`
 if [ -z "$MYIP" ]; then
   echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
+  rm "$LOG"
   exit 1
 fi
 
 #----------------------------------------------------------------
 # Check NFS servers are accessible
 
+echo "$PROG: pinging NFS servers to see if they are contactable" >>"$LOG"
+
 PING_GOOD=
 PING_ERROR=
 for NFS_SERVER in ${NFS_SERVERS}; do
-  if ! ping -c 1 $NFS_SERVER >>"$LOG" 2>&1; then
+  if ! ping -q -c 4 $NFS_SERVER >>"$LOG" 2>&1; then
     PING_ERROR="$PING_ERROR $NFS_SERVER"
   else
     PING_GOOD="$PING_GOOD $NFS_SERVER"
@@ -665,9 +844,11 @@ done
 if [ -z "$PING_GOOD" ]; then
   # None of the NFS servers were pingable: probably a network problem?
   echo "$PROG: error: none of the NFS server can be pinged:$PING_ERROR" >&2
+  echo "$PROG: error: none of the NFS server can be pinged:$PING_ERROR" >>"$LOG"
   if [ -z "$I_CONFIGURED_ETH1" ]; then
     echo "$PROG: please check $I_CONFIGURED_ETH1" >&2
   fi
+  rm "$LOG"
   exit 1
 elif [ -n "$PING_ERROR" ]; then
   # Some good, some bad
@@ -681,34 +862,8 @@ else
   :
 fi
 
-#----------------------------------------------------------------
-# Install NFS client
-
-if [ "$FLAVOUR" = 'dnf' ]; then
-
-  # nfs-utils
-  if ! rpm -q nfs-utils > /dev/null; then
-    # Package not installed: install it
-    dnf -y install "nfs-utils" >>"$LOG" 2>&1
-  fi
-
-elif [ "$FLAVOUR" = 'yum' ]; then
-
-  # nfs-utils
-  if ! rpm -q nfs-utils > /dev/null; then
-    # Package not installed: install it
-    yum -y install "nfs-utils" >>"$LOG" 2>&1
-  fi
-
-elif [ "$FLAVOUR" = 'apt' ]; then
-
-  # nfs-common
-  apt-get -y --no-upgrade install "nfs-common" >>"$LOG" 2>&1
-
-else
-  echo "$PROG: internal error" >&2
-  exit 3
-fi
+echo "$PROG: ping done" >>"$LOG"
+echo >>"$LOG"
 
 #----------------------------------------------------------------
 # Convert allocation specifier arguments into export paths
@@ -738,6 +893,7 @@ $PROG: error: no export for $ALLOC_SPEC to this machine ($MYIP)
   "${ALLOC_SPEC}", or contact QRIScloud support.
 
 EOF
+      rm "$LOG"
       exit 1
     fi
 
@@ -751,6 +907,7 @@ EOF
   if ! echo "$VALUE" | grep -q -E '\/Q[0-9]{4}$'; then
     echo "$PROG: internal error: unexpected export path syntax: $VALUE" >&2
     echo "  Please report this to QRIScloud Support." >&2
+    rm "$LOG"
     exit 1
   fi
 
@@ -763,131 +920,100 @@ EOF
   EXPORT_PATHS="${EXPORT_PATHS} ${VALUE}"
 done
 
+echo "$PROG: export paths: $EXPORT_PATHS" >>"$LOG"
+
 #----------------------------------------------------------------
 # Perform desired action. Overview of the remaining code:
 #
-# if (umount) {
-#    ad hoc unmounting
-#    exit 0
+# if (autofs or mount) {
+#   create users and groups
 # }
-# create users and groups
+#
 # if (mount) {
 #    ad hoc mounting
-#    exit 0
 # }
-# configure autofs mounting
+# else if (umount) {
+#    ad hoc unmounting
+# }
+# else if (autofs) {
+#   configure autofs
+# }
+#
 # exit 0
 
 #----------------------------------------------------------------
-# Ad hoc unmounting
+# Create group and users (if needed)
 
-if [ -n "$DO_UMOUNT" ]; then
-  ERROR=
-  for NFS_EXPORT in $EXPORT_PATHS; do
+if [ $ACTION = 'autofs' -o $ACTION = 'mount' ]; then
+  # Create group and users (needed for both autofs and ad hoc mounting)
 
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
-
-    if [ -d "$DIR/$ALLOC" ]; then
-
-      # Attempt to unmount it
-
-      if [ -n "$VERBOSE" ]; then
-        echo "umount \"$DIR/$ALLOC\""
-      fi
-      if umount "$DIR/$ALLOC"; then
-        ERROR=yes
-      fi
-
-      # Attempt to remove the individual mount directory
-
-      if rmdir "$DIR/$ALLOC"; then
-        ERROR=yes
-      fi
-
-    else
-      if [ -n "$VERBOSE" ]; then
-        echo "$PROG: warning: mount directory does not exist: $DIR/$ALLOC"
-      fi
+  if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
+  
+    if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
+      # Group 48 does not exist: create it
+      groupadd --gid 48 apache
     fi
-  done 
-  # Note: we do NOT attempt to remove the directory containing the mounts
-
-  if [ -n "$ERROR" ]; then
-    exit 1
+  
+    if ! grep -q "^[^:]*:[^:]*:48:" /etc/passwd; then
+      # User 48 does not exist: create it
+      adduser --uid 48 --gid 48 --comment "Apache" \
+              --no-create-home --shell /sbin/nologin apache
+    fi
+  
+    for NFS_EXPORT in $EXPORT_PATHS; do
+      ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+  
+      NUM=`echo $ALLOC | sed s/Q0*//`
+  
+      # Note: admin user was 55931, but users now changed to 540xx
+      ID_NUMBER=`expr 54000 + $NUM`
+  
+      if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
+        # User does not exist: create it
+        adduser --uid "$ID_NUMBER" --comment "Allocation $ALLOC" "q$NUM"
+      fi
+    done
+  
+  elif [ "$FLAVOUR" = 'apt' ]; then
+  
+    if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
+      # Group 48 does not exist: create it
+      addgroup --gid 48 --gecos "Apache" --quiet apache
+    fi
+  
+    if ! grep -q "^[^:]*:[^:]*:48:" /etc/passwd; then
+      # User 48 does not exist: create it
+      adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
+              --no-create-home \
+              --shell /sbin/nologin --disabled-login \
+              "apache"
+    fi
+  
+    for NFS_EXPORT in $EXPORT_PATHS; do
+      ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+  
+      NUM=`echo $ALLOC | sed s/Q0*//`
+      ID_NUMBER=`expr 54000 + $NUM`
+  
+      if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
+        # User does not exist: create it
+        adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet \
+                --disabled-password \
+                "q$NUM"
+      fi
+    done
+  
+  else
+    echo "$PROG: internal error" >&2
+    rm "$LOG"
+    exit 3
   fi
-
-  rm "$LOG"
-  exit 0 # done for this mode
 fi
-
-#----------------------------------------------------------------
-# Create group and users (needed for both ad hoc mounting and autofs)
-
-if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
-
-  if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
-    # Group 48 does not exist: create it
-    groupadd --gid 48 apache
-  fi
-
-  if ! grep -q "^[^:]*:[^:]*:48:" /etc/passwd; then
-    # User 48 does not exist: create it
-    adduser --uid 48 --gid 48 --comment "Apache" \
-            --no-create-home --shell /sbin/nologin apache
-  fi
-
-  for NFS_EXPORT in $EXPORT_PATHS; do
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
-
-    NUM=`echo $ALLOC | sed s/Q0*//`
-
-    # Note: admin user was 55931, but users now changed to 540xx
-    ID_NUMBER=`expr 54000 + $NUM`
-
-    if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
-      # User does not exist: create it
-      adduser --uid "$ID_NUMBER" --comment "Allocation $ALLOC" "q$NUM"
-    fi
-  done
-
-elif [ "$FLAVOUR" = 'apt' ]; then
-
-  if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
-    # Group 48 does not exist: create it
-    addgroup --gid 48 --gecos "Apache" --quiet apache
-  fi
-
-  if ! grep -q "^[^:]*:[^:]*:48:" /etc/passwd; then
-    # User 48 does not exist: create it
-    adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
-            --no-create-home \
-            --shell /sbin/nologin --disabled-login \
-            "apache"
-  fi
-
-  for NFS_EXPORT in $EXPORT_PATHS; do
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
-
-    NUM=`echo $ALLOC | sed s/Q0*//`
-    ID_NUMBER=`expr 54000 + $NUM`
-
-    if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
-      # User does not exist: create it
-      adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet \
-              --disabled-password \
-              "q$NUM"
-    fi
-  done
-
-else
-  echo "$PROG: internal error" >&2
-  exit 3
-fi
-
+    
 #----------------------------------------------------------------
 # Ad hoc mounting
 
-if [ -n "$DO_MOUNT" ]; then
+if [ $ACTION = 'mount' ]; then
 
   ERROR=
 
@@ -932,140 +1058,152 @@ if [ -n "$DO_MOUNT" ]; then
   done 
 
   if [ -n "$ERROR" ]; then
+    rm "$LOG"
     exit 1
   fi
 
-  rm "$LOG"
-  exit 0 # done for this mode
-fi
+#----------------------------------------------------------------
+# Ad hoc unmounting
+
+elif [ $ACTION = 'umount' ]; then
+  ERROR=
+  for NFS_EXPORT in $EXPORT_PATHS; do
+
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+
+    if [ -d "$DIR/$ALLOC" ]; then
+
+      # Attempt to unmount it
+
+      if [ -n "$VERBOSE" ]; then
+        echo "umount \"$DIR/$ALLOC\""
+      fi
+      if umount "$DIR/$ALLOC"; then
+        ERROR=yes
+      fi
+
+      # Attempt to remove the individual mount directory
+
+      if rmdir "$DIR/$ALLOC"; then
+        ERROR=yes
+      fi
+
+    else
+      if [ -n "$VERBOSE" ]; then
+        echo "$PROG: warning: mount directory does not exist: $DIR/$ALLOC"
+      fi
+    fi
+  done 
+  # Note: we do NOT attempt to remove the directory containing the mounts
+
+  if [ -n "$ERROR" ]; then
+    rm "$LOG"
+    exit 1
+  fi
 
 #----------------------------------------------------------------
-# Install autofs automounter
 
-# yum -y $QUIET_FLAG update
-# apt-get update
-
-if [ "$FLAVOUR" = 'dnf' ]; then
-
-  # Install autofs
-
-  if ! rpm -q autofs > /dev/null; then
-    # Package not installed: install it
-    dnf -y install "autofs" >>"$LOG" 2>&1
+elif [ $ACTION = 'autofs' ]; then
+  # Configure autofs automounter
+  
+  # Create direct map file
+  
+  DMAP=/etc/auto.qriscloud
+  
+  if [ -n "$VERBOSE" ]; then
+    echo "$PROG: configuring autofs: creating direct map: $DMAP"
   fi
-
-elif [ "$FLAVOUR" = 'yum' ]; then
-
-  # Install autofs
-
-  if ! rpm -q autofs > /dev/null; then
-    # Package not installed: install it
-    yum -y install "autofs" >>"$LOG" 2>&1
+  
+  TMP="$DMAP".tmp-$$
+  
+  echo "# autofs mounts for storage" > "$TMP"
+  
+  for NFS_EXPORT in $EXPORT_PATHS; do
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+  
+    echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
+  done
+  
+  mv "$TMP" "$DMAP"
+  
+  # Modify master map file
+  
+  if ! grep -q "^/- file:$DMAP\$" /etc/auto.master; then
+    # Add entry to the master map, because it is not yet in there
+  
+    if [ -n "$VERBOSE" ]; then
+      echo "$PROG: configuring autofs: modifying master: /etc/auto.master"
+    fi
+    echo "/- file:$DMAP" >> /etc/auto.master
   fi
-
-elif [ "$FLAVOUR" = 'apt' ]; then
-
-  # TODO: check if already installed?
-
-  apt-get -y --no-upgrade install "autofs" >>"$LOG" 2>&1
+  
+  # Restart autofs service (so it uses the new configuration)
+  
+  if [ -n "$VERBOSE" ]; then
+    echo "$PROG: configuring autofs: autofs service: restarting..."
+  fi
+  echo >>"$LOG"
+  echo "$PROG: Restarting autofs service..." >>"$LOG"
+  
+  if which systemctl >/dev/null 2>&1; then
+    # Systemd is used (e.g. CentOS 7)
+    systemctl enable autofs.service  >>"$LOG" 2>&1
+    systemctl restart autofs.service  >>"$LOG" 2>&1
+  else
+    # Init.d is used (e.g. CentOS 6)
+    service autofs restart  >>"$LOG" 2>&1
+  fi
+  
+  if [ -n "$VERBOSE" ]; then
+    echo "$PROG: configuring autofs: autofs service: restarted"
+  fi
+  
+  # Check mounts work
+  
+  sleep 1  # needed, otherwise sometimes the mounts fail the test below
+  
+  ERROR=
+  for NFS_EXPORT in $EXPORT_PATHS; do
+    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+  
+    if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
+      echo "$PROG: failed to mount: $DIR/$ALLOC" >>"$LOG"
+      echo "$PROG: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
+      ERROR=yes
+    else
+      echo "$PROG: autofs mount successful: $DIR/$ALLOC" >>"$LOG"
+      echo "$PROG: autofs mount successful: $DIR/$ALLOC"
+    fi
+  done
+  
+  if [ -n "$ERROR" ]; then
+    # Unsuccessful: leave log file
+  
+    cat >&2 <<EOF
+    Failures to mount could be because the NFS server is highly loaded.
+    If the problem persists, please contact QRIScloud Support.
+EOF
+  
+    echo "$PROG: error \(see $LOG for details\)" >&2
+    exit 1
+  fi
 
 else
-  echo "$PROG: internal error" >&2
+
+#----------------------------------------------------------------
+# Bad ACTION  
+
+  echo "$PROG: internal error: bad action: $ACTION" >&2
+  rm "$LOG"
   exit 3
 fi
 
 #----------------------------------------------------------------
-# Configure autofs automounter
-
-# Create direct map file
-
-DMAP=/etc/auto.qriscloud
-
-if [ -n "$VERBOSE" ]; then
-  echo "$PROG: configuring autofs: creating direct map: $DMAP"
-fi
-
-TMP="$DMAP".tmp-$$
-trap "rm -f "$TMP"; echo $PROG: command failed: aborted; exit 3" ERR
-
-echo "# autofs mounts for storage" > "$TMP"
-
-for NFS_EXPORT in $EXPORT_PATHS; do
-  ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
-
-  echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
-done
-
-mv "$TMP" "$DMAP"
-trap "echo $PROG: command failed: aborted; exit 3" ERR # abort if command fails
-
-# Modify master map file
-
-if ! grep -q "^/- file:$DMAP\$" /etc/auto.master; then
-  # Add entry to the master map, because it is not yet in there
-
-  if [ -n "$VERBOSE" ]; then
-    echo "$PROG: configuring autofs: modifying master: /etc/auto.master"
-  fi
-  echo "/- file:$DMAP" >> /etc/auto.master
-fi
-
-# Restart autofs service (so it uses the new configuration)
-
-if [ -n "$VERBOSE" ]; then
-  echo "$PROG: configuring autofs: autofs service: restarting..."
-fi
-
-if which systemctl >/dev/null 2>&1; then
-  # Systemd is used (e.g. CentOS 7)
-  systemctl enable autofs.service  >>"$LOG" 2>&1
-  systemctl restart autofs.service  >>"$LOG" 2>&1
-else
-  # Init.d is used (e.g. CentOS 6)
-  service autofs restart  >>"$LOG" 2>&1
-fi
-
-if [ -n "$VERBOSE" ]; then
-  echo "$PROG: configuring autofs: autofs service: restarted"
-fi
-
-#----------------------------------------------------------------
-# Check mounts work
-
-sleep 1  # needed, otherwise sometimes the mounts fail the test below
-
-ERROR=
-for NFS_EXPORT in $EXPORT_PATHS; do
-  ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
-
-  if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
-    echo "$PROG: failed to mount: $DIR/$ALLOC" >>"$LOG"
-    echo "$PROG: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
-    ERROR=yes
-  else
-    echo "$PROG: autofs mount successful: $DIR/$ALLOC" >>"$LOG"
-    echo "$PROG: autofs mount successful: $DIR/$ALLOC"
-  fi
-done
-
-if [ -n "$ERROR" ]; then
-  # Unsuccessful: leave log file
-    cat >&2 <<EOF
-  Failures to mount could be because the NFS server is highly loaded.
-  If the problem persists, please contact QRIScloud Support.
-EOF
-fi
-
-#----------------------------------------------------------------
-# Clean up and exit
+# Success: clean up and exit
 
 rm "$LOG"
 
-if [ -n "$ERROR" ]; then
-  exit 1
-else
-  exit 0
-fi
+exit 0
 
 #----------------------------------------------------------------
 #EOF
