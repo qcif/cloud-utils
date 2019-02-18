@@ -13,9 +13,21 @@ Scripts
 
 ### [q-storage-setup](q-storage-setup.md)
 
-Setup a NFS client in a Nectar virtual machine instance to mount
-QRISdata Collection Storage allocations.  The VM instance must be
-running in the _QRIScloud_ availability zone.
+Setup a mount to access a QRISdata Collection Storage allocation
+using NFS.
+
+Note: the allocation must be enabled for NFS access and the
+virtual machine instance must be running in Nectar's _QRIScloud_
+availability zone.
+
+
+### qris-nextcloud-setup.sh
+
+Setup a mount to access a QRISdata Collection Storage allocation
+using WebDAV to the QRIScloud Nextcloud service.
+
+Note: the allocation must be enabled for Nextcloud access.
+
 
 ### [q-image-create](q-image-create.md)
 
@@ -37,4 +49,5 @@ GNU General Public License for more details.
 Contact
 -------
 
-Please send feedback and queries to Hoylen Sue at <h.sue@qcif.edu.au>.
+Please send feedback and queries to QRIScloud Support
+<https://support.qriscloud.org.au/>.
