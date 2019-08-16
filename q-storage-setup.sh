@@ -19,7 +19,7 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=4.1.1
+VERSION=4.1.2
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -84,11 +84,15 @@ nfs_export_from_showmount () {
   RESULT=
   for NFS_SERVER in ${NFS_SERVERS}; do
     # showmount will produce lines like "/tier2d1/Q0039/Q0039 10.255.120.8/32"
-    # The first `grep` keeps the lines that match the allocation.
-    # The second `grep` matches host's IP address (ends in comma or "/32").
+    # The first `grep` keeps lines that match the particular allocation.
+    # The second `grep` keeps lines that match the particular host IP address,
+    #  The match MUST start with either a space or comma; and
+    #  MUST end in a slash or comma or is the end of the line.
+    #  This is to avoid false positives (e.g. "10.1.1.10" incorrectly matching
+    #  "210.1.1.10" or "10.1.1.100").
     # The `cut` command keeps the first column, which is the export path.
 
-    MATCH=`showmount -e "$NFS_SERVER" | grep "${ALLOC}/${ALLOC}" | egrep "[ ,]${IP_ADDRESS}((,.*)|(/32.*))$" | cut -d ' ' -f 1`
+    MATCH=`showmount -e "$NFS_SERVER" | grep "${ALLOC}/${ALLOC}" | egrep "[ ,]${IP_ADDRESS}((,.*)|(/32.*))?$" | cut -d ' ' -f 1`
 
     if [ -n "$MATCH" ]; then
       # Match or matches were found for the allocation
