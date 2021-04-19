@@ -20,15 +20,6 @@ Note: the allocation must be enabled for NFS access and the
 virtual machine instance must be running in Nectar's _QRIScloud_
 availability zone.
 
-
-### qris-nextcloud-setup.sh
-
-Setup a mount to access a QRISdata Collection Storage allocation
-using WebDAV to the QRIScloud Nextcloud service.
-
-Note: the allocation must be enabled for Nextcloud access.
-
-
 ### [q-image-create](q-image-create.md)
 
 Utility to help with the process of creating a virtual machine images
