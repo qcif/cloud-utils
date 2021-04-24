@@ -74,15 +74,15 @@ https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md
 
 #### 1d. Get the script
 
-Get a copy of the _q-image-create.sh_ script onto the creation
+Get a copy of the _q-image-maker.sh_ script onto the creation
 host. This can be done by uploading it or downloading it. The example
 below downloads it from the GitHub respository. Note: if GitHub
 changes the raw download URL, find out its new value from the [project
 in GitHub](https://github.com/qcif/cloud-utils).
 
     [creator@host]$ cd /mnt/creator
-    [creator@host]$ curl -O https://raw.githubusercontent.com/qcif/cloud-utils/master/q-image-create.sh
-    [creator@host]$ chmod a+x q-image-create.sh
+    [creator@host]$ curl -O https://raw.githubusercontent.com/qcif/cloud-utils/master/q-image-maker.sh
+    [creator@host]$ chmod a+x q-image-maker.sh
 
 ### Step 2: Install the guest system from the ISO
 
@@ -91,7 +91,7 @@ in GitHub](https://github.com/qcif/cloud-utils).
 Create an disk image, and run a virtual machine with it and the two
 ISO images:
 
-    [creator@host]$ ./q-image-create.sh create --iso windows.iso  --iso virtio-win.iso \
+    [creator@host]$ ./q-image-maker.sh create --iso windows.iso  --iso virtio-win.iso \
                     --size 30  image.qcow2
 
 The disk image **must** be large enough to hold the operating system
@@ -325,7 +325,7 @@ Turn on automatic updates and install the current updates.
 If additional configuration needs to be performed, restart the guest
 virtual machine by booting off the disk image.
 
-    $ ./q-image-create.sh --run image.qcow2
+    $ ./q-image-maker.sh --run image.qcow2
 
 As before, connect to the VNC server (through the ssh tunnel) without
 using a VNC password.
@@ -442,7 +442,7 @@ Sysprep must be rerun on it.
 
 Upload the disk image, optionally giving it a name:
 
-    [creator@host]$ ./q-image-create.sh upload --windows --name "My new image" image.qcow2
+    [creator@host]$ ./q-image-maker.sh upload --windows --name "My new image" image.qcow2
 
 The `--windows` option sets the "os_type" property on the image.  It
 controls the behaviour when the image is used. For example, instances

@@ -4,11 +4,11 @@
 #
 # To create a disk image:
 #
-#     q-image-create.sh create --iso install-disc.iso example.qcow2
+#     q-image-maker.sh create --iso install-disc.iso example.qcow2
 #
 # To upload an disk image to Openstack:
 #
-#     q-image-create.sh upload example.qcow2
+#     q-image-maker.sh upload example.qcow2
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -93,14 +93,14 @@ if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]; then
   # Use GNU enhanced getopt
   if ! getopt --name "$EXE" --long $LONG_OPTS --options $SHORT_OPTS -- "$@" >/dev/null; then
     echo "$EXE: usage error (use -h or --help for help)" >&2
-    exit $STATUS_USAGE_ERROR
+    exit "$STATUS_USAGE_ERROR"
   fi
   ARGS=$(getopt --name "$EXE" --long $LONG_OPTS --options $SHORT_OPTS -- "$@")
 else
   # Use original getopt (no long option names, no whitespace, no sorting)
   if ! getopt $SHORT_OPTS "$@" >/dev/null; then
     echo "$EXE: usage error (use -h for help)" >&2
-    exit $STATUS_USAGE_ERROR
+    exit "$STATUS_USAGE_ERROR"
   fi
   ARGS=$(getopt $SHORT_OPTS "$@")
 fi
@@ -407,8 +407,8 @@ EOF
   sleep 3
   if ! ps $QEMU_PID > /dev/null; then
     # QEMU process no longer running
-    cat $LOGFILE
-    rm $LOGFILE
+    cat "$LOGFILE"
+    rm "$LOGFILE"
     echo "$EXE: error: QEMU failed" 2>&1
     exit 1
   fi
@@ -567,7 +567,7 @@ do_upload() {
     INSTANCE_MIN_DISK_GIB=$MIN_GIB_NEEDED
   else
     # Value provided: check it is not smaller than the size indicated by the image file
-    if [  $INSTANCE_MIN_DISK_GIB -lt $MIN_GIB_NEEDED ]; then
+    if [  "$INSTANCE_MIN_DISK_GIB" -lt "$MIN_GIB_NEEDED" ]; then
       echo "$EXE: error: minimum disk size too small: $INSTANCE_MIN_DISK_GIB GiB (need at least ${MIN_GIB_NEEDED} GiB)" >&2
       exit 1
     fi
@@ -605,8 +605,8 @@ EOF
        --file "$IMAGE" \
        --progress \
        --private \
-       --min-disk $INSTANCE_MIN_DISK_GIB \
-       --min-ram $INSTANCE_MIN_RAM_MIB \
+       --min-disk "$INSTANCE_MIN_DISK_GIB" \
+       --min-ram "$INSTANCE_MIN_RAM_MIB" \
        --project "$OS_PROJECT_ID" \
        --property os_type=$OS_TYPE \
        "$IMAGE_NAME" ; then

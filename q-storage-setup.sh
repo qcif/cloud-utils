@@ -3,7 +3,7 @@
 # Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
 # instances.
 #
-# Copyright (C) 2013-2019 Queensland Cyber Infrastructure Foundation Ltd.
+# Copyright (C) 2013-2021 Queensland Cyber Infrastructure Foundation Ltd.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,13 @@
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
 #----------------------------------------------------------------
 
-VERSION=4.1.2
+PROGRAM='q-storage-setup'
+VERSION='4.1.3'
+
+EXE=$(basename "$0" .sh)
+EXE_EXT=$(basename "$0")
+
+#----------------------------------------------------------------
 
 DEFAULT_ADHOC_MOUNT_DIR="/mnt"
 DEFAULT_AUTO_MOUNT_DIR="/data"
@@ -29,27 +35,29 @@ MOUNT_OPTIONS_BASE="nfsvers=3,hard,intr,nosuid,nodev,timeo=100,retrans=5"
 MOUNT_OPTIONS_DNF_YUM=nolock
 MOUNT_OPTIONS_APT=
 
-MOUNT_AUTOFS_EXTRA=bg
+MOUNT_AUTOFS_EXTRA='bg'
 
 NFS_SERVERS="10.255.120.200 10.255.120.226 10.255.122.70"
 
 #----------------------------------------------------------------
 # Error checking
 
-PROG=`basename "$0"`
-
 # Log file where output from commands are redirected.
 # This is used because apt-get is noisy, even in quiet mode!
 LOG="/tmp/${PROG}-$$.log"
 
-trap "echo $PROG: aborted \(see $LOG for details\); exit 3" ERR
-# Can't figure out which command failed? Run using "bash -x" or uncomment:
-#   set -x # write each command to stderr before it is exceuted
+#----------------------------------------------------------------
+# Bash strict mode: http://redsymbol.net/articles/unofficial-bash-strict-mode/
 
-# If using sh, use following instead (since "trap ERR" does not work in sh):
-#   set -e # fail if a command fails
+# Exit immediately if a simple command exits with a non-zero status.
+#   Trap ERR for better error messages than "set -e" gives (but ERR only
+#   works for Bash and unlike "set -e" it doesn't propagate into functions.
+#   Can't figure out which command failed? Run using "bash -x".
+set -e
+trap 'echo $EXE: aborted; exit $STATUS_UNEXPECTED_ERROR' ERR
 
-set -u # fail on attempts to expand undefined variables
+set -u # fail on attempts to expand undefined environment variables
+set -o pipefail # prevents errors in a pipeline from being masked
 
 #----------------------------------------------------------------
 # Functions
@@ -76,7 +84,7 @@ nfs_export_from_showmount () {
   IP_ADDRESS=$2
 
   if ! which showmount >/dev/null 2>&1; then
-    echo "$PROG: error: command not found: showmount" >&2
+    echo "$EXE: error: command not found: showmount" >&2
     # This function was called before showmount was installed.
     exit 1
   fi
@@ -92,16 +100,16 @@ nfs_export_from_showmount () {
     #  "210.1.1.10" or "10.1.1.100").
     # The `cut` command keeps the first column, which is the export path.
 
-    MATCH=`showmount -e "$NFS_SERVER" | grep "${ALLOC}/${ALLOC}" | egrep "[ ,]${IP_ADDRESS}((,.*)|(/32.*))?$" | cut -d ' ' -f 1`
+    MATCH=$(showmount -e "$NFS_SERVER" | grep "${ALLOC}/${ALLOC}" | grep -E "[ ,]${IP_ADDRESS}((,.*)|(/32.*))?$" | cut -d ' ' -f 1)
 
     if [ -n "$MATCH" ]; then
       # Match or matches were found for the allocation
 
-      NUM_MATCHES=`echo "$MATCH" | wc -l`
+      NUM_MATCHES=$(echo "$MATCH" | wc -l)
 
-      if [ -n "$RESULT" -o "$NUM_MATCHES" -ne 1 ]; then
+      if [ -n "$RESULT" ] || [ "$NUM_MATCHES" -ne 1 ]; then
         # Matches from another NFS server or multiple matches were found
-        echo "$PROG: error: $ALLOC has multiple NFS exports (please contact QRIScloud Support)" >&2
+        echo "$EXE: error: $ALLOC has multiple NFS exports (please contact QRIScloud Support)" >&2
         exit 1
       fi
 
@@ -109,13 +117,13 @@ nfs_export_from_showmount () {
     fi
   done
 
-  echo $RESULT # could be blank if match not found
+  echo "$RESULT" # could be blank if match not found
 }
 
 # Function to convert an NFS export path to an allocation Q-number.
 
 alloc_from_nfs_path () {
-  echo $1 | sed -E 's/^.+\///'
+  echo "$1" | sed -E 's/^.+\///'
 }
 
 #----------------------------------------------------------------
@@ -126,7 +134,6 @@ DO_AUTOFS=
 DO_MOUNT=
 DO_UMOUNT=
 READ_ONLY=
-STAGE=
 DIR=
 
 ## Define options: trailing colon means has an argument
@@ -142,7 +149,7 @@ it looks something like \"10.255.120.200:/tier2d1/Q0039/Q0039\".
 The export path can be obtained from the QRIScloud Services Portal:
   https://services.qriscloud.org.au/"
 
-SHORT_HELP="Usage: $PROG [options] allocSpecs...
+SHORT_HELP="Usage: $EXE_EXT [options] allocSpecs...
 Options:
   -a      configure and use autofs (default)
   -m      perform ad hoc mount
@@ -159,7 +166,7 @@ Options:
 $ALLOC_SPEC_HELP
 "
 
-LONG_HELP="Usage: $PROG [options] allocSpecs...
+LONG_HELP="Usage: $$EXE_EXT [options] allocSpecs...
 Options:
   -a | --autofs     configure and use autofs (default)
   -m | --mount      perform ad hoc mount
@@ -190,18 +197,18 @@ fi
 
 if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]; then
   # Use GNU enhanced getopt
-  if ! getopt --name "$PROG" --long $LONG_OPTS --options $SHORT_OPTS -- "$@" >/dev/null; then
-    echo "$PROG: usage error (use -h or --help for help)" >&2
+  if ! getopt --name "$EXE_EXT" --long $LONG_OPTS --options $SHORT_OPTS -- "$@" >/dev/null; then
+    echo "$EXE: usage error (use -h or --help for help)" >&2
     exit 2
   fi
-  ARGS=`getopt --name "$PROG" --long $LONG_OPTS --options $SHORT_OPTS -- "$@"`
+  ARGS=$(getopt --name "$EXE_EXT" --long $LONG_OPTS --options $SHORT_OPTS -- "$@")
 else
   # Use original getopt (no long option names, no whitespace, no sorting)
   if ! getopt $SHORT_OPTS "$@" >/dev/null; then
-    echo "$PROG: usage error (use -h for help)" >&2
+    echo "$EXE: usage error (use -h for help)" >&2
     exit 2
   fi
-  ARGS=`getopt $SHORT_OPTS "$@"`
+  ARGS=$(getopt $SHORT_OPTS "$@")
 fi
 eval set -- $ARGS
 
@@ -214,14 +221,13 @@ while [ $# -gt 0 ]; do
     -u | --umount)   DO_UMOUNT=yes;;
     -r | --read-only) READ_ONLY=yes;;
     -d | --dir)      DIR="$2"; shift;;
-    -V | --version)  echo "$PROG $VERSION"; exit 0;;
+    -V | --version)  echo "$PROGRAM $VERSION"; exit 0;;
     -v | --verbose)  VERBOSE=yes;;
 
     -h | --help)     if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]
                      then echo "$LONG_HELP";
                      else echo "$SHORT_HELP";
                      fi;  exit 0;;
-    --version)       echo "$PROG $VERSION"; exit 0;;
     --)              shift; break;; # end of options
   esac
   shift
@@ -229,21 +235,21 @@ done
 
 # Determine action
 
-if [ -z "$DO_MOUNT" -a -z "$DO_UMOUNT" -a -z "$DO_AUTOFS" ]; then
+if [ -z "$DO_MOUNT" ] && [ -z "$DO_UMOUNT" ] && [ -z "$DO_AUTOFS" ]; then
   # No action specified: default to autofs
   DO_AUTOFS=yes
 fi
 
-if [ -n "$DO_MOUNT" -a -n "$DO_UMOUNT" ]; then
-  echo "$PROG: usage error: cannot use --mount and --umount together" >&2
+if [ -n "$DO_MOUNT" ] && [ -n "$DO_UMOUNT" ]; then
+  echo "$EXE: usage error: cannot use --mount and --umount together" >&2
   exit 2
 fi
-if [ -n "$DO_AUTOFS" -a -n "$DO_MOUNT" ]; then
-  echo "$PROG: usage error: cannot use --autofs and --mount together" >&2
+if [ -n "$DO_AUTOFS" ] && [ -n "$DO_MOUNT" ]; then
+  echo "$EXE: usage error: cannot use --autofs and --mount together" >&2
   exit 2
 fi
-if [ -n "$DO_AUTOFS" -a -n "$DO_UMOUNT" ]; then
-  echo "$PROG: usage error: cannot use --autofs and --umount together" >&2
+if [ -n "$DO_AUTOFS" ] && [ -n "$DO_UMOUNT" ]; then
+  echo "$EXE: usage error: cannot use --autofs and --umount together" >&2
   exit 2
 fi
 
@@ -256,23 +262,23 @@ elif [ -n "$DO_MOUNT" ]; then
 elif [ -n "$DO_UMOUNT" ]; then
   ACTION=umount
 else
-  echo "$PROG: internal error: no action" >&2
+  echo "$EXE: internal error: no action" >&2
   exit 3
 fi
 
 # Use default directories (if explicit directory not specified)
 
-if [ $ACTION = 'mount' -o $ACTION = 'umount' ]; then
+if [ $ACTION = 'mount' ] || [ $ACTION = 'umount' ]; then
   # Mount or unmount
   if [ -z "$DIR" ]; then
     DIR="$DEFAULT_ADHOC_MOUNT_DIR"
   fi
   if [ ! -e "$DIR" ]; then
-    echo "$PROG: error: directory does not exist: $DIR" >&2
+    echo "$EXE: error: directory does not exist: $DIR" >&2
     exit 1
   fi
   if [ ! -d "$DIR" ]; then
-    echo "$PROG: error: not a directory: $DIR" >&2
+    echo "$EXE: error: not a directory: $DIR" >&2
     exit 1
   fi
 else
@@ -283,12 +289,12 @@ else
 fi
 
 if ! echo "$DIR" | grep -q '^\/'; then
-  echo "$PROG: error: directory must be an absolute path: $DIR" >&2
+  echo "$EXE: error: directory must be an absolute path: $DIR" >&2
   exit 2
 fi
 
 if [ $# -lt 1 ]; then
-  echo "$PROG: usage error: missing allocSpec(s) (use -h for help)" >&2
+  echo "$EXE: usage error: missing allocSpec(s) (use -h for help)" >&2
   exit 2
 fi
 
@@ -296,7 +302,7 @@ fi
 
 ERROR=
 for ALLOC_SPEC in "$@"; do
-  if echo $ALLOC_SPEC | grep -q '^Q[0-9][0-9]*$'; then
+  if echo "$ALLOC_SPEC" | grep -q '^Q[0-9][0-9]*$'; then
     # Q-number
 
     QNUM=$ALLOC_SPEC
@@ -304,7 +310,7 @@ for ALLOC_SPEC in "$@"; do
   elif echo "$ALLOC_SPEC" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\:\/[0-9A-Za-z]+\/Q[0-9]{4}\/Q[0-9]{4}$'; then
     # Export path (nnn.nnn.nnn.nnn:/xxx/Qnnn/Qnnn)
 
-    SERVER=`echo "$ALLOC_SPEC" | sed -E s/:.*//`
+    SERVER=$(echo "$ALLOC_SPEC" | sed -E s/:.*//)
     SERVER_KNOWN=
     for NFS_SERVER in ${NFS_SERVERS}; do
       if [ "$NFS_SERVER" = "$SERVER" ]; then
@@ -312,13 +318,13 @@ for ALLOC_SPEC in "$@"; do
       fi
     done
     if [ -z "$SERVER_KNOWN" ]; then
-      echo "$PROG: error: unsupported server IP address: $SERVER" >&2
+      echo "$EXE: error: unsupported server IP address: $SERVER" >&2
       echo "  Please check NFS export path is correct: $ALLOC_SPEC" >&2
       ERROR=1
       continue
     fi
 
-    QNUM=`alloc_from_nfs_path $ALLOC_SPEC`
+    QNUM=$(alloc_from_nfs_path "$ALLOC_SPEC")
 
   else
     # Neither Q-number or export path
@@ -337,10 +343,10 @@ for ALLOC_SPEC in "$@"; do
   fi
 
   # Extract NUM as the number part (without leading zeros)
-  NUM=`echo $QNUM | sed s/Q0*//`
+  NUM=$(echo "$QNUM" | sed s/Q0*//)
 
   # Special check for Q0, Q00, Q000, etc. which slips through the above check
-  if ! echo $NUM | grep -q '^[0-9][0-9]*$'; then
+  if ! echo "$NUM" | grep -q '^[0-9][0-9]*$'; then
     echo "Usage error: bad Q-number: zero is not valid: $ALLOC_SPEC" >&2
     ERROR=1
     continue
@@ -349,7 +355,7 @@ for ALLOC_SPEC in "$@"; do
   if [ "$NUM" -gt 999 ]; then
     # This will cause UID/GID to violate the 54nnn pattern and
     # the behaviour is not yet defined.
-    echo "$PROG: error: allocations over 999 not supported: $ALLOC_SPEC" >&2
+    echo "$EXE: error: allocations over 999 not supported: $ALLOC_SPEC" >&2
     ERROR=1
     continue
   fi
@@ -366,9 +372,9 @@ fi
 #----------------
 # Check OS is supported
 
-OS=`uname -s`
+OS=$(uname -s)
 if [ "$OS" != 'Linux' ]; then
-  echo "$PROG: error: unsupported operating system: $OS" >&2
+  echo "$EXE: error: unsupported operating system: $OS" >&2
   exit 1
 fi
 
@@ -384,7 +390,7 @@ elif which yum > /dev/null 2>&1; then
 elif which apt-get > /dev/null 2>&1; then
   FLAVOUR=apt
 else
-  echo "$PROG: error: could not find package manager: dnf, yum or apt-get" >&2
+  echo "$EXE: error: could not find package manager: dnf, yum or apt-get" >&2
   exit 1
 fi
 
@@ -395,29 +401,29 @@ fi
 # even though some don't have ifconfig/ifup/ifdown.
 
 if ! which ip >/dev/null 2>&1; then
-  echo "$PROG: error: command not found: ip" >&2
+  echo "$EXE: error: command not found: ip" >&2
   exit 1
 fi
 
 if ! ip link show dev eth1 >/dev/null; then
-  echo "$PROG: eth1 not found: not running on a QRIScloud virtual machine?" >&2
+  echo "$EXE: eth1 not found: not running on a QRIScloud virtual machine?" >&2
   exit 1
 fi
 
 #----------------
 # Check if runing with root privileges
 
-if [ `id -u` != '0' ]; then
-  echo "$PROG: error: this script requires root privileges" >&2
+if [ "$(id -u)" != '0' ]; then
+  echo "$EXE: error: this script requires root privileges" >&2
   exit 1
 fi
 
 #----------------------------------------------------------------
 # Start log
 
-TIMESTAMP=`date '+%F %T %:z'`
+TIMESTAMP=$(date '+%F %T %:z')
 
-echo "$PROG: $TIMESTAMP" >>"$LOG" 2>&1
+echo "$EXE: $TIMESTAMP" >>"$LOG" 2>&1
 
 #----------------------------------------------------------------
 # Install packages (if they are not already installed)
@@ -439,7 +445,7 @@ if [ $ACTION != 'umount' ]; then
     if ! rpm -q nfs-utils > /dev/null; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: nfs-utils"
+	echo "$EXE: installing package: nfs-utils"
       fi
       dnf -y install "nfs-utils" >>"$LOG" 2>&1
     fi
@@ -450,7 +456,7 @@ if [ $ACTION != 'umount' ]; then
     if ! rpm -q nfs-utils > /dev/null; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: nfs-utils"
+	echo "$EXE: installing package: nfs-utils"
       fi
       yum -y install "nfs-utils" >>"$LOG" 2>&1
     fi
@@ -461,13 +467,13 @@ if [ $ACTION != 'umount' ]; then
     if ! dpkg-query --status "nfs-common"  >/dev/null 2>&1; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: nfs-common"
+	echo "$EXE: installing package: nfs-common"
       fi
       apt-get -y --no-upgrade install "nfs-common" >>"$LOG" 2>&1
     fi
   
   else
-    echo "$PROG: internal error: bad install flavour: $FLAVOUR" >&2
+    echo "$EXE: internal error: bad install flavour: $FLAVOUR" >&2
     rm "$LOG"
     exit 3
   fi
@@ -479,12 +485,12 @@ if [ $ACTION != 'umount' ]; then
 
     # Check: all supported distributions of CentOS have ifup/ifdown
     if ! which ifup >/dev/null 2>&1; then
-      echo "$PROG: error: command not found: ifup" >&2
+      echo "$EXE: error: command not found: ifup" >&2
       rm "$LOG"
       exit 1
     fi
     if ! which ifdown >/dev/null 2>&1; then
-      echo "$PROG: error: command not found: ifdown" >&2
+      echo "$EXE: error: command not found: ifdown" >&2
       rm "$LOG"
       exit 1
     fi
@@ -495,12 +501,12 @@ if [ $ACTION != 'umount' ]; then
     if ! which ifup >/dev/null 2>&1; then
       # Starting with Fedora 29, ifup and ifdown is a legacy network script
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: network-scripts"
+	echo "$EXE: installing package: network-scripts"
       fi
       dnf -y install "network-scripts" >>"$LOG" 2>&1
     fi
     if ! which ifdown >/dev/null 2>&1; then
-      echo "$PROG: error: command not found: ifdown" >&2
+      echo "$EXE: error: command not found: ifdown" >&2
       rm "$LOG"
       exit 1
     fi
@@ -516,24 +522,24 @@ if [ $ACTION != 'umount' ]; then
     if ! dpkg-query --status "ifupdown"  >/dev/null 2>&1; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: ifupdown"
+	echo "$EXE: installing package: ifupdown"
       fi
       apt-get -y --no-upgrade install "ifupdown" >>"$LOG" 2>&1
     fi
 
     if ! which ifup >/dev/null 2>&1; then
-      echo "$PROG: error: ifupdown: command not found: ifup" >&2
+      echo "$EXE: error: ifupdown: command not found: ifup" >&2
       rm "$LOG"
       exit 1
     fi
     if ! which ifdown >/dev/null 2>&1; then
-      echo "$PROG: error: ifupdown: command not found: ifdown" >&2
+      echo "$EXE: error: ifupdown: command not found: ifdown" >&2
       rm "$LOG"
       exit 1
     fi
   
   else
-    echo "$PROG: internal error: bad install flavour: $FLAVOUR" >&2
+    echo "$EXE: internal error: bad install flavour: $FLAVOUR" >&2
     rm "$LOG"
     exit 3
   fi
@@ -558,7 +564,7 @@ if [ $ACTION = 'autofs' ]; then
     if ! rpm -q autofs > /dev/null; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: autofs"
+	echo "$EXE: installing package: autofs"
       fi
       dnf -y install "autofs" >>"$LOG" 2>&1
     fi
@@ -570,7 +576,7 @@ if [ $ACTION = 'autofs' ]; then
     if ! rpm -q autofs > /dev/null; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: autofs"
+	echo "$EXE: installing package: autofs"
       fi
       yum -y install "autofs" >>"$LOG" 2>&1
     fi
@@ -582,13 +588,13 @@ if [ $ACTION = 'autofs' ]; then
     if ! dpkg-query --status "autofs"  >/dev/null 2>&1; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
-	echo "$PROG: installing package: autofs"
+	echo "$EXE: installing package: autofs"
       fi
       apt-get -y --no-upgrade install "autofs" >>"$LOG" 2>&1
     fi
   
   else
-    echo "$PROG: internal error: bad install flavour: $FLAVOUR" >&2
+    echo "$EXE: internal error: bad install flavour: $FLAVOUR" >&2
     rm "$LOG"
     exit 3
   fi
@@ -606,7 +612,7 @@ elif [ $FLAVOUR = 'yum' ]; then
 elif [ $FLAVOUR = 'apt' ]; then
   MOUNT_OPTIONS="$MOUNT_OPTIONS,$MOUNT_OPTIONS_APT"
 else
-  echo "$PROG: internal error: unknown flavour: $FLAVOUR" >&2
+  echo "$EXE: internal error: unknown flavour: $FLAVOUR" >&2
   rm "$LOG"
   exit 3
 fi
@@ -617,14 +623,14 @@ else
   MOUNT_OPTIONS="ro,$MOUNT_OPTIONS"
 fi
 
-echo "$PROG: mount options: $MOUNT_OPTIONS" >>"$LOG"
+echo "$EXE: mount options: $MOUNT_OPTIONS" >>"$LOG"
 
 #----------------------------------------------------------------
 # Configure private network interface
 
 I_CONFIGURED_ETH1=
 
-if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
+if [ "$FLAVOUR" = 'dnf' ] || [ "$FLAVOUR" = 'yum' ]; then
 
   # Configure eth1
 
@@ -634,12 +640,12 @@ if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
     # eth1 not configured: create eth1 configuration file
 
     if [ -n "$VERBOSE" ]; then
-      echo "$PROG: eth1: creating config file: $ETH1_CFG"
+      echo "$EXE: eth1: creating config file: $ETH1_CFG"
     fi
 
     cat > "$ETH1_CFG" <<EOF
 # ifcfg-eth1: QRIScloud internal network interface
-# Created by $PROG on $TIMESTAMP
+# Created by $EXE on $TIMESTAMP
 #
 # See <https://github.com/qcif/cloud-utils/blob/master/q-storage-setup.md>
 
@@ -687,7 +693,7 @@ EOF
       # First, try and set the MTU in the network configuration.
 
       if [ -n "$VERBOSE" ]; then
-        echo "$PROG: eth1: MTU DHCP not working: adding MTU 9000 config"
+        echo "$EXE: eth1: MTU DHCP not working: adding MTU 9000 config"
       fi
 
       # Uncomment the MTU configuration lines
@@ -716,14 +722,14 @@ EOF
 	POST_FILE=/etc/sysconfig/network-scripts/ifup-post
 
 	if [ -n "$VERBOSE" ]; then
-          echo "$PROG: eth1: MTU config not working: adding MTU 9000 command to $POST_FILE"
+          echo "$EXE: eth1: MTU config not working: adding MTU 9000 command to $POST_FILE"
 	fi
 
 	# Append extra commands just before the "exit 0" at the end of the file
 	awk "
 /^exit 0\s*$/ {
             print \"# Set the MTU to 9000 on eth1 (the QRIScloud private network interface)\"
-            print \"# Added by $PROG on $TIMESTAMP\"
+            print \"# Added by $EXE on $TIMESTAMP\"
             print \"if [ \\\"\$REALDEVICE\\\" = \\\"eth1\\\" ]; then\"
             print \"  /sbin/ip link set \$REALDEVICE mtu 9000\"
             print \"fi\"
@@ -751,7 +757,7 @@ elif [ "$FLAVOUR" = 'apt' ]; then
   IF_FILE=/etc/network/interfaces
 
   if [ ! -f "$IF_FILE" ]; then
-    echo "$PROG: file missing: $IF_FILE" >&2
+    echo "$EXE: file missing: $IF_FILE" >&2
     rm "$LOG"
     exit 1
   fi
@@ -762,7 +768,7 @@ elif [ "$FLAVOUR" = 'apt' ]; then
     cat >> "$IF_FILE" <<EOF
 
 # The secondary network interface (QRIScloud internal network interface)
-# Added by $PROG on $TIMESTAMP
+# Added by $EXE on $TIMESTAMP
 # See <https://github.com/qcif/cloud-utils/blob/master/q-storage-setup.md>
 
 auto eth1
@@ -790,7 +796,7 @@ EOF
       # MTU size does not work. This code is to work around it.
 
       if [ -n "$VERBOSE" ]; then
-        echo "$PROG: eth1: DHCP MTU not working: configuring MTU 9000"
+        echo "$EXE: eth1: DHCP MTU not working: configuring MTU 9000"
       fi
 
       # Uncomment the MTU configuration line
@@ -808,7 +814,7 @@ EOF
   fi
 
 else
-  echo "$PROG: internal error" >&2
+  echo "$EXE: internal error" >&2
   rm "$LOG"
   exit 3
 fi
@@ -816,16 +822,16 @@ fi
 # Check MTU packet size
 
 if ! ip link show dev eth1 | grep -q ' mtu 9000 '; then
-  echo "$PROG: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
+  echo "$EXE: error: eth1: MTU != 9000 (please contact QRIScloud Support)" >&2
   rm "$LOG"
   exit 1
 fi
 
 # Get the eth1 IPv4 address (it will be needed to lookup the NFS export path)
 
-MYIP=`ip addr show dev eth1 scope global | grep 'inet ' | sed 's/^ *inet \(.*\)\/.*/\1/'`
+MYIP=$(ip addr show dev eth1 scope global | grep 'inet ' | sed 's/^ *inet \(.*\)\/.*/\1/')
 if [ -z "$MYIP" ]; then
-  echo "$PROG: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
+  echo "$EXE: error: eth1: no IPv4 address (please contact QRIScloud Support)" >&2
   rm "$LOG"
   exit 1
 fi
@@ -833,12 +839,12 @@ fi
 #----------------------------------------------------------------
 # Check NFS servers are accessible
 
-echo "$PROG: pinging NFS servers to see if they are contactable" >>"$LOG"
+echo "$EXE: pinging NFS servers to see if they are contactable" >>"$LOG"
 
 PING_GOOD=
 PING_ERROR=
 for NFS_SERVER in ${NFS_SERVERS}; do
-  if ! ping -q -c 4 $NFS_SERVER >>"$LOG" 2>&1; then
+  if ! ping -q -c 4 "$NFS_SERVER" >>"$LOG" 2>&1; then
     PING_ERROR="$PING_ERROR $NFS_SERVER"
   else
     PING_GOOD="$PING_GOOD $NFS_SERVER"
@@ -847,26 +853,28 @@ done
 
 if [ -z "$PING_GOOD" ]; then
   # None of the NFS servers were pingable: probably a network problem?
-  echo "$PROG: error: none of the NFS server can be pinged:$PING_ERROR" >&2
-  echo "$PROG: error: none of the NFS server can be pinged:$PING_ERROR" >>"$LOG"
+  echo "$EXE: error: none of the NFS server can be pinged:$PING_ERROR" >&2
+  echo "$EXE: error: none of the NFS server can be pinged:$PING_ERROR" >>"$LOG"
   if [ -z "$I_CONFIGURED_ETH1" ]; then
-    echo "$PROG: please check $I_CONFIGURED_ETH1" >&2
+    echo "$EXE: please check $I_CONFIGURED_ETH1" >&2
   fi
   rm "$LOG"
   exit 1
 elif [ -n "$PING_ERROR" ]; then
   # Some good, some bad
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: warning: cannot ping some NFS servers:$PING_ERROR" >>"$LOG"
-    echo "$PROG: mount might be ok if your allocation is not on them." >>"$LOG"
-    echo "$PROG: mount will fail if it is." >>"$LOG"
+    cat >> "$LOG" <<EOF
+$EXE: warning: cannot ping some NFS servers:$PING_ERROR
+$EXE: mount might be ok if your allocation is not on them.
+$EXE: mount will fail if it is.
+EOF
   fi
 else
   # All good
   :
 fi
 
-echo "$PROG: ping done" >>"$LOG"
+echo "$EXE: ping done" >>"$LOG"
 echo >>"$LOG"
 
 #----------------------------------------------------------------
@@ -876,14 +884,14 @@ EXPORT_PATHS=
 for ALLOC_SPEC in "$@"; do
   VALUE=
 
-  if echo $ALLOC_SPEC | grep -q '^Q[0-9][0-9]*$'; then
+  if echo "$ALLOC_SPEC" | grep -q '^Q[0-9][0-9]*$'; then
     # Argument is a Q-number: detect the export path advertised using showmount
 
-    VALUE=`nfs_export_from_showmount $ALLOC_SPEC $MYIP`
+    VALUE=$(nfs_export_from_showmount "$ALLOC_SPEC" "$MYIP")
 
     if [ -z "$VALUE" ]; then
       cat >&2 <<EOF
-$PROG: error: no export for $ALLOC_SPEC to this machine ($MYIP)
+$EXE: error: no export for $ALLOC_SPEC to this machine ($MYIP)
 
   CHECK this machine is running in the Nectar project nominated for NFS access.
 
@@ -909,14 +917,14 @@ EOF
   # Double check value ends in Qnnnn, because rest of script expects it
 
   if ! echo "$VALUE" | grep -q -E '\/Q[0-9]{4}$'; then
-    echo "$PROG: internal error: unexpected export path syntax: $VALUE" >&2
+    echo "$EXE: internal error: unexpected export path syntax: $VALUE" >&2
     echo "  Please report this to QRIScloud Support." >&2
     rm "$LOG"
     exit 1
   fi
 
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: mount: $VALUE"
+    echo "$EXE: mount: $VALUE"
   fi
 
   # Append to list
@@ -924,7 +932,7 @@ EOF
   EXPORT_PATHS="${EXPORT_PATHS} ${VALUE}"
 done
 
-echo "$PROG: export paths: $EXPORT_PATHS" >>"$LOG"
+echo "$EXE: export paths: $EXPORT_PATHS" >>"$LOG"
 
 #----------------------------------------------------------------
 # Perform desired action. Overview of the remaining code:
@@ -948,10 +956,10 @@ echo "$PROG: export paths: $EXPORT_PATHS" >>"$LOG"
 #----------------------------------------------------------------
 # Create group and users (if needed)
 
-if [ $ACTION = 'autofs' -o $ACTION = 'mount' ]; then
+if [ $ACTION = 'autofs' ] || [ $ACTION = 'mount' ]; then
   # Create group and users (needed for both autofs and ad hoc mounting)
 
-  if [ "$FLAVOUR" = 'dnf' -o "$FLAVOUR" = 'yum' ]; then
+  if [ "$FLAVOUR" = 'dnf' ] || [ "$FLAVOUR" = 'yum' ]; then
   
     if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
       # Group 48 does not exist: create it
@@ -965,12 +973,12 @@ if [ $ACTION = 'autofs' -o $ACTION = 'mount' ]; then
     fi
   
     for NFS_EXPORT in $EXPORT_PATHS; do
-      ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+      ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
   
-      NUM=`echo $ALLOC | sed s/Q0*//`
+      NUM=$(echo "$ALLOC" | sed s/Q0*//)
   
       # Note: admin user was 55931, but users now changed to 540xx
-      ID_NUMBER=`expr 54000 + $NUM`
+      ID_NUMBER=$(( 54000 + NUM ))
   
       if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
         # User does not exist: create it
@@ -994,10 +1002,10 @@ if [ $ACTION = 'autofs' -o $ACTION = 'mount' ]; then
     fi
   
     for NFS_EXPORT in $EXPORT_PATHS; do
-      ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+      ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
   
-      NUM=`echo $ALLOC | sed s/Q0*//`
-      ID_NUMBER=`expr 54000 + $NUM`
+      NUM=$(echo "$ALLOC" | sed s/Q0*//)
+      ID_NUMBER=$(( 54000 + NUM ))
   
       if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
         # User does not exist: create it
@@ -1008,7 +1016,7 @@ if [ $ACTION = 'autofs' -o $ACTION = 'mount' ]; then
     done
   
   else
-    echo "$PROG: internal error" >&2
+    echo "$EXE: internal error" >&2
     rm "$LOG"
     exit 3
   fi
@@ -1022,21 +1030,21 @@ if [ $ACTION = 'mount' ]; then
   ERROR=
 
   for NFS_EXPORT in $EXPORT_PATHS; do
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+    ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
 
     # Create individual mount directory
 
     I_CREATED_DIRECTORY=
     if [ ! -e "$DIR/$ALLOC" ]; then
       if ! mkdir "$DIR/$ALLOC"; then
-        echo "$PROG: error: could not create mount point: $DIR/$ALLOC" >&2
+        echo "$EXE: error: could not create mount point: $DIR/$ALLOC" >&2
         ERROR=yes
         continue
       fi
       I_CREATED_DIRECTORY=yes
     else
       if [ ! -d "$DIR/$ALLOC" ]; then
-        echo "$PROG: error: mount point is not a directory: $DIR/$ALLOC" >&2
+        echo "$EXE: error: mount point is not a directory: $DIR/$ALLOC" >&2
         ERROR=yes
         continue
       fi
@@ -1053,11 +1061,11 @@ if [ $ACTION = 'mount' ]; then
       if [ -n "$I_CREATED_DIRECTORY" ]; then
         rmdir "$DIR/$ALLOC" # clean up
       fi
-      echo "$PROG: mount failed for $ALLOC" >&2
+      echo "$EXE: mount failed for $ALLOC" >&2
       ERROR=yes
       continue
     else
-      echo "$PROG: ad hoc mount created: $DIR/$ALLOC"
+      echo "$EXE: ad hoc mount created: $DIR/$ALLOC"
     fi
   done 
 
@@ -1073,7 +1081,7 @@ elif [ $ACTION = 'umount' ]; then
   ERROR=
   for NFS_EXPORT in $EXPORT_PATHS; do
 
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+    ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
 
     if [ -d "$DIR/$ALLOC" ]; then
 
@@ -1094,7 +1102,7 @@ elif [ $ACTION = 'umount' ]; then
 
     else
       if [ -n "$VERBOSE" ]; then
-        echo "$PROG: warning: mount directory does not exist: $DIR/$ALLOC"
+        echo "$EXE: warning: mount directory does not exist: $DIR/$ALLOC"
       fi
     fi
   done 
@@ -1115,7 +1123,7 @@ elif [ $ACTION = 'autofs' ]; then
   DMAP=/etc/auto.qriscloud
   
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: configuring autofs: creating direct map: $DMAP"
+    echo "$EXE: configuring autofs: creating direct map: $DMAP"
   fi
   
   TMP="$DMAP".tmp-$$
@@ -1123,7 +1131,7 @@ elif [ $ACTION = 'autofs' ]; then
   echo "# autofs mounts for storage" > "$TMP"
   
   for NFS_EXPORT in $EXPORT_PATHS; do
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+    ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
   
     echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
   done
@@ -1136,7 +1144,7 @@ elif [ $ACTION = 'autofs' ]; then
     # Add entry to the master map, because it is not yet in there
   
     if [ -n "$VERBOSE" ]; then
-      echo "$PROG: configuring autofs: modifying master: /etc/auto.master"
+      echo "$EXE: configuring autofs: modifying master: /etc/auto.master"
     fi
     echo "/- file:$DMAP" >> /etc/auto.master
   fi
@@ -1144,10 +1152,10 @@ elif [ $ACTION = 'autofs' ]; then
   # Restart autofs service (so it uses the new configuration)
   
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: configuring autofs: autofs service: restarting..."
+    echo "$EXE: configuring autofs: autofs service: restarting..."
   fi
   echo >>"$LOG"
-  echo "$PROG: Restarting autofs service..." >>"$LOG"
+  echo "$EXE: Restarting autofs service..." >>"$LOG"
   
   if which systemctl >/dev/null 2>&1; then
     # Systemd is used (e.g. CentOS 7)
@@ -1159,7 +1167,7 @@ elif [ $ACTION = 'autofs' ]; then
   fi
   
   if [ -n "$VERBOSE" ]; then
-    echo "$PROG: configuring autofs: autofs service: restarted"
+    echo "$EXE: configuring autofs: autofs service: restarted"
   fi
   
   # Check mounts work
@@ -1168,15 +1176,15 @@ elif [ $ACTION = 'autofs' ]; then
   
   ERROR=
   for NFS_EXPORT in $EXPORT_PATHS; do
-    ALLOC=`alloc_from_nfs_path $NFS_EXPORT`
+    ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
   
     if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
-      echo "$PROG: failed to mount: $DIR/$ALLOC" >>"$LOG"
-      echo "$PROG: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
+      echo "$EXE: failed to mount: $DIR/$ALLOC" >>"$LOG"
+      echo "$EXE: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
       ERROR=yes
     else
-      echo "$PROG: autofs mount successful: $DIR/$ALLOC" >>"$LOG"
-      echo "$PROG: autofs mount successful: $DIR/$ALLOC"
+      echo "$EXE: autofs mount successful: $DIR/$ALLOC" >>"$LOG"
+      echo "$EXE: autofs mount successful: $DIR/$ALLOC"
     fi
   done
   
@@ -1188,7 +1196,7 @@ elif [ $ACTION = 'autofs' ]; then
     If the problem persists, please contact QRIScloud Support.
 EOF
   
-    echo "$PROG: error \(see $LOG for details\)" >&2
+    echo "$EXE: error \(see $LOG for details\)" >&2
     exit 1
   fi
 
@@ -1197,7 +1205,7 @@ else
 #----------------------------------------------------------------
 # Bad ACTION  
 
-  echo "$PROG: internal error: bad action: $ACTION" >&2
+  echo "$EXE: internal error: bad action: $ACTION" >&2
   rm "$LOG"
   exit 3
 fi

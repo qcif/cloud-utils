@@ -1,12 +1,12 @@
-q-image-create
-==============
+q-image-maker
+=============
 
 Utility to help make virtual machine image for use on Openstack.
 
 Synopsis
 --------
 
-    q-image-make.sh command [options] diskImage
+    q-image-maker.sh command [options] diskImage
 
 Description
 -----------
@@ -19,7 +19,7 @@ While the QEMU and OpenStack can be used directly, this script makes
 the image creation and uploading process easier, by invoking them with
 the necessary options.
 
-Usage: q-image-make.sh [create|run|upload] [options] diskImage
+Usage: q-image-maker.sh [create|run|upload] [options] diskImage
 
 Available commands:
 
@@ -59,8 +59,8 @@ Examples
 Guides are available to show the use of this script for creating
 images for:
 
-- [CentOS 6.5](image-linux.md)
-- [Windows Server 2020](image-windows.md)
+- [Linux](README-linux.md)
+- [Windows](README-windows.md)
 
 Requirements
 ------------

@@ -7,8 +7,6 @@
 # 7, because there has been significant changes. If you are interested in
 # helping update this script, please contact QRIScloud Support.**
 #
-# Copyright (C) 2013, Queensland Cyber Infrastructure Foundation Ltd.
-#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -21,9 +19,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
+#
+# Copyright (C) 2013-2021, Queensland Cyber Infrastructure Foundation Ltd.
 #----------------------------------------------------------------
 
-PROG=`basename $0`
+PROGRAM='q-gui-setup'
+VERSION='2.0.0'
+
+EXE=$(basename "$0" .sh)
+EXE_EXT=$(basename "$0")
 
 #----------------------------------------------------------------
 # Process command line arguments
@@ -36,13 +40,13 @@ QUIET=
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=`getopt --name "$PROG" --long help,password:,force,quiet,verbose --options hp:fqv -- "$@"`
+  ARGS=$(getopt --name "$EXE_EXT" --long help,password:,force,quiet,verbose --options hp:fqv -- "$@")
 else
   # Original getopt is available (no long option names nor whitespace)
-  ARGS=`getopt hp:fqv "$@"`
+  ARGS=$(getopt hp:fqv "$@")
 fi
 if [ $? -ne 0 ]; then
-  echo "$PROG: usage error (use -h for help)" >&2
+  echo "$EXE: usage error (use -h for help)" >&2
   exit 1
 fi
 eval set -- $ARGS
@@ -54,13 +58,14 @@ while [ $# -gt 0 ]; do
         -f | --force)    FORCE=yes;;
         -q | --quiet)    QUIET=yes;;
         -v | --verbose)  VERBOSE=yes;;
+        --version)       echo "$PROGRAM $VERSION"; exit 0 ;;
         --)              shift; break;;
     esac
     shift
 done
 
 if [ -n "$HELP" ]; then
-  echo "Usage: $PROG [options] userNames..."
+  echo "Usage: $EXE_EXT [options] userNames..."
   echo "Options:"
   echo "  -p | --password str  use this VNC password instead of a random one"
   echo "  -f | --force         run on untested system (use with caution)"
@@ -73,7 +78,7 @@ fi
 # Process command line arguments
 
 if [ $# -lt 1 ]; then
-  echo "$PROG: usage error: missing usernames (use -h for help)" >&2
+  echo "$EXE: usage error: missing usernames (use -h for help)" >&2
   exit 2
 fi
 
@@ -83,29 +88,29 @@ fi
 # Check if running on expected operating system and distribution
 
 if [ -z "$FORCE" ]; then
-  OS=`uname -s`
+  OS=$(uname -s)
   if [ "$OS" != 'Linux' ]; then
-    echo "$PROG: error: unsupported operating system: $OS (use --force?)"
+    echo "$EXE: error: unsupported operating system: $OS (use --force?)"
     exit 1
   fi
 
   if [ -r '/etc/system-release' ]; then
-    ISSUE=`cat /etc/system-release`
+    ISSUE=$(cat /etc/system-release)
   else
-    ISSUE=`head -1 /etc/issue`
+    ISSUE=$(head -1 /etc/issue)
   fi
-  if [ "$ISSUE" != 'CentOS release 6.4 (Final)' -a \
-		"$ISSUE" != 'CentOS release 6.9 (Final)' -a \
-		"$ISSUE" != 'Scientific Linux release 6.4 (Carbon)' ]; then
-    echo "$PROG: error: unsupported distribution: $ISSUE (use --force?)"
+  if [ "$ISSUE" != 'CentOS release 6.4 (Final)' ] \
+		  && [ "$ISSUE" != 'CentOS release 6.9 (Final)' ] \
+		  && [ "$ISSUE" != 'Scientific Linux release 6.4 (Carbon)' ]; then
+    echo "$EXE: error: unsupported distribution: $ISSUE (use --force?)"
     exit 1
   fi
 fi
 
 # Check if run with necessary privileges
 
-if [ `id -u` != '0' ]; then
-  echo "$PROG: this script requires root privileges" >&2
+if [ "$(id -u)" -ne 0 ]; then
+  echo "$EXE: this script requires root privileges" >&2
   exit 1
 fi
 
@@ -114,8 +119,7 @@ fi
 ERROR=
 for USERNAME in "$@"
 do
-  id "$USERNAME" > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
+  if ! id "$USERNAME" > /dev/null 2>&1; then
     echo "Error: user does not exist: $USERNAME" >&2
     ERROR=1
   fi
@@ -126,18 +130,17 @@ fi
 
 #----------------------------------------------------------------
 
-function die () {
-  echo "$PROG: error encountered" >&2
+die () {
+  echo "$EXE: error encountered" >&2
   exit 1
 }
 
 #----------------------------------------------------------------
 # Make sure hostname resolves (otherwise vncserver will not start)
 
-HOSTNAME=`hostname`
+HOSTNAME=$(hostname)
 
-ping -c 1 "$HOSTNAME" > /dev/null 2>&1
-if [ $? -ne 0 ]; then
+if ! ping -c 1 "$HOSTNAME" > /dev/null 2>&1; then
   # Hostname not resolving: add entry for it in /etc/hosts file
 
   if [ -z "$QUIET" ]; then
@@ -147,9 +150,9 @@ if [ $? -ne 0 ]; then
   echo "127.0.0.1   $HOSTNAME" >> /etc/hosts
 
   # Check it now works
-  ping -c 1 "$HOSTNAME" > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
-    echo "$PROG: internal error: could not resolve $HOSTNAME" >&2
+
+  if ! ping -c 1 "$HOSTNAME" > /dev/null 2>&1 ; then
+    echo "$EXE: internal error: could not resolve $HOSTNAME" >&2
     exit 1
   fi
 fi
@@ -167,8 +170,8 @@ fi
 
 for GROUP in "X Window System" "Desktop" "Fonts"
 do
-  yum grouplist "$GROUP" | grep 'Installed Groups' > /dev/null
-  if [ $? -ne 0 ]; then
+
+  if ! yum grouplist "$GROUP" | grep 'Installed Groups' > /dev/null ; then
     # Group not installed: install it
     if [ -z "$QUIET" ]; then
       echo "Installing group: $GROUP"
@@ -189,8 +192,7 @@ INSTALLED_VNC_SERVER=
 
 for PACKAGE in "tigervnc-server"
 do
-  rpm -q "$PACKAGE" > /dev/null
-  if [ $? -ne 0 ]; then
+  if ! rpm -q "$PACKAGE" > /dev/null; then
     # Package not installed: install it
 
     if [ -z "$QUIET" ]; then
@@ -230,7 +232,7 @@ VNC_CONFIG='/etc/sysconfig/vncservers'
 # Check that VNC server configuration file is present
 
 if [ ! -f "$VNC_CONFIG" ]; then
-  echo "$PROG: error: VNC server not installed correctly: config file missing: $VNC_CONFIG" >&2
+  echo "$EXE: error: VNC server not installed correctly: config file missing: $VNC_CONFIG" >&2
   exit 1
 fi
 
@@ -255,7 +257,7 @@ for USERNAME in "$@"
 do
   if [ -z "$QUIET" ]; then
     echo "User: $USERNAME"
-    echo "  VNC server $COUNT: port `expr 5900 + $COUNT`"
+    echo "  VNC server $COUNT: port $((5900 + COUNT))"
   fi
 
   # Build up list of display:user pairs
@@ -267,34 +269,34 @@ do
   # VNC server arguments
   echo "VNCSERVERARGS[$COUNT]=\"$VNC_PARAMS\"" >> $VNC_CONFIG
 
-  COUNT=`expr $COUNT + 1`
+  COUNT=$(( COUNT + 1 ))
 
-  PWFILE="/home/$USERNAME/.vnc/passwd"
-  if [ ! -f "$PWFILE" ]; then
+  PW_FILE="/home/$USERNAME/.vnc/passwd"
+  if [ ! -f "$PW_FILE" ]; then
     # VNC password file for user does not exist: create it
 
-    PWDIR=`dirname "$PWFILE"`
-    if [ ! -d "$PWDIR" ]; then
+    PW_DIR=$(dirname "$PW_FILE")
+    if [ ! -d "$PW_DIR" ]; then
       # Create directory as that user so owner and group are correct
-      su "$USERNAME" -c "mkdir \"$PWDIR\"" || die
-      chmod g-w "$PWDIR" || die
-      chmod o-w "$PWDIR" || die
+      su "$USERNAME" -c "mkdir \"$PW_DIR\"" || die
+      chmod g-w "$PW_DIR" || die
+      chmod o-w "$PW_DIR" || die
     fi
 
     if [ -z "$PASSWORD" ]; then
       # Make up a random password
       # vncpasswd uses only the first 8 chars, so "6" binary bytes is enough
-      PASSWORD=`openssl rand -base64 6`
+      PASSWORD=$(openssl rand -base64 6)
     fi
 
     if [ -z "$QUIET" ]; then
       echo "  VNC password: setting with vncpasswd: $PASSWORD"
     fi
 
-    su "$USERNAME" -c "touch \"$PWFILE\"" # create file as that user
-    chmod 600 "$PWFILE" || die
+    su "$USERNAME" -c "touch \"$PW_FILE\"" # create file as that user
+    chmod 600 "$PW_FILE" || die
 
-    echo "$PASSWORD" | vncpasswd -f > "$PWFILE"
+    echo "$PASSWORD" | vncpasswd -f > "$PW_FILE"
 
   else
     # VNC password file for user exists
