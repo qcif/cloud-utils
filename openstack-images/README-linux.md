@@ -1,8 +1,9 @@
-Creating an image for CentOS 6.5
-================================
+Creating a Linux image
+======================
 
 This document describes how to create a virtual machine instance of
-CentOS 6.5 for the [NeCTAR](http://nectar.org.au/research-cloud)
+CentOS Stream 8 for the
+[Nectar Research Cloud](http://nectar.org.au/research-cloud)
 deployment of [OpenStack](https://www.openstack.org).
 
 These instructions should apply to other Linux distributions, if the
@@ -16,31 +17,32 @@ Requirements
 - OpenStack project to upload the image to.
 - Local system, with a ssh client and a VNC client.
 - Creation host system, with QEMU and glance (e.g. a [configured VM instance](image-init.md)).
-- Installation ISO image for the CentOS 6.5.
+- Installation ISO image for the CentOS Stream 8.
 
 Process
 -------
 
 ### Step 1: Get installation ISO image on the creation host system
 
-#### 1a. Connect to the host system and create a SSH tunnel
+#### 1a. Connect to the host system and create a SSH tunnel for VNC
 
-From the local system, ssh into the creation host as the new user.  At
-the same time, create a ssh tunnel from a local port (in this example
-15900 is used) to a VNC port (5900) on the creation host:
+From the local system, ssh into the creation host as the user that
+will be creating the images.  At the same time, create a ssh tunnel
+from a local port (in this example 15900 is used) to a VNC port (5900)
+on the creation host:
 
     [local]$ ssh -L 15900:localhost:5900 creator@creation.host.system
 
 #### 1b. Get the installation ISO image
 
-Get a copy of the ISO image onto the creation host.  The example
-commands uses _curl_ to download it from one of the CentOS mirror
+Get a copy of the ISO image onto the creation host.
+
+This example uses _curl_ to download it from one of the CentOS mirror
 sites. If _curl_ is not available, try using _wget_.  Store it in the
-working directory on the large ephemeral disk, and not in the home
-directory on the small boot disk.
+working directory.
 
     [creator@host]$ cd /mnt/creator
-    [creator@host]$ curl -L -O --progress-bar http://mirror.aarnet.edu.au/pub/centos/6.5/isos/x86_64/CentOS-6.5-x86_64-minimal.iso
+    [creator@host]$ curl -L -O --progress-bar http://mirror.aarnet.edu.au/pub/centos/8-stream/isos/x86_64/CentOS-Stream-8-x86_64-20210416-dvd1.iso
 
 #### 1c. Get the script
 
@@ -54,8 +56,8 @@ in GitHub](https://github.com/qcif/cloud-utils).
     [creator@host]$ curl -O https://raw.githubusercontent.com/qcif/cloud-utils/master/q-image-create.sh
     [creator@host]$ chmod a+x q-image-create.sh
 
-If the _q-image-create.sh_ script is not used, _qemu-kvm_ and _glance_
-will have to be directly invoked.
+The _q-image-create.sh_ script is just a convenient way to invoke the
+_qemu-kvm_ and _glance_ commands.
 
 ### Step 2: Install the guest system from the ISO
 
@@ -68,7 +70,9 @@ QEMU Copy-On-Write version 2 (QCOW2) format, and the VNC server is
 listening on display 0 (port 5900). If needed, these defaults can be
 changed using command line options.
 
-    [creator@host]$ ./q-image-create.sh --verbose --iso CentOS-6.5-x86_64-minimal.iso --create disk.qcow2
+    [creator@host]$ ./q-image-create.sh create \
+                    --iso CentOS-6.5-x86_64-minimal.iso \
+                    disk.qcow2
 
 The script runs _qemu-kvm_ in the background with _nohup_. So you can
 log out of the creation host and it will continue running.
@@ -76,22 +80,28 @@ log out of the creation host and it will continue running.
 #### 2b. Use VNC to access the guest system
 
 Connect to the VNC server (e.g. in this example to local port 15900
-which is port forwarded to port 5900 on the creation host).  There is
-no VNC password: press return if prompted for one. Note: a VNC
-password can be set using the "change vnc password" command in the
-QEMU console.
-
-The QEMU console can be accessed by typing Ctrl-Alt-2 in the VNC
-client; and Ctrl-Alt-1 to return to the main display. The QEMU console
-can be used to list and change the virtual CD-ROM (using the commands
-"info block" and "change ide1-cd0 filenameOfISOImage"). The
-"system_reset" command can be used to reboot the guest system.  The
-"quit" command can be used to stop the guest system and the emulator.
+which is port forwarded to port 5900 on the creation host).
 
 Warning: If the local machine is an Apple Macintosh do not use the
-_Screen Sharing_ client that comes with OS X, because it is
+_Screen Sharing_ client that comes with macOS, because it is
 incompatible with the VNC implementation provided by QEMU/KVM: use a
 third party VNC client.
+
+There is no VNC password.  On some VNC clients, simply press return if
+prompted for it. On other VNC clients (e.g. Screens on macOS)
+configure the client to not use any authentication.  Note: the VNC
+password can be set using the QEMU console.
+
+The QEMU console is accessed by typing Ctrl-Alt-2 into the VNC
+session. Type Ctrl-Alt-1 to return to the main display. Some commands
+supported the by the QEMU console are:
+
+- `change vnc password` to set the VNC password.
+- `info block` list devices.
+- `change ide1-cd0 filenameOfIsoImage` to swap the virtual CD-ROM.
+- `system_reset` to reboot the guest system.
+- `help` show available commands.
+- `quit` to stop the guest system and the emulator.
 
 #### 2c. Install the guest system
 
@@ -143,7 +153,7 @@ recommended:
     empty file, it will get recreated (with new hardcoded MAC
     addresses) upon reboot. Instead, create a symbolic link to
     /dev/null for it.
- 
+
         [root@guest]# rm /etc/udev/rules.d/70-persistent-net.rules
         [root@guest]# ln -s /dev/null /etc/udev/rules.d/70-persistent-net.rules
 
@@ -157,11 +167,11 @@ recommended:
      second network interface. This will allow any second network
      interface (when available on the VM instance, such as in
      QRIScloud) to be automatically configured.
-    
+
         [root@guest]# cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth1
         [root@guest]# vi /etc/sysconfig/network-scripts/ifcfg-eth1
           # Change the DEVICE and NAME entries from eth0 to eth1
-        
+
 - Disable console screen blanking
 
     It can be confusing to come back to a session and find the screen
@@ -315,7 +325,7 @@ If additional configuration needs to be performed, restart the guest
 virtual machine by booting off the disk image.
 
     $ ./q-image-create.sh --run disk.qcow2
-	
+
 As before, connect to the VNC server (through the ssh tunnel) with an
 empty password.
 
@@ -346,7 +356,8 @@ to upload.
 
 Upload the disk image, optionally giving it a name:
 
-    [creator@host]$ ./q-image-create.sh --name "My CentOS image" --upload disk.qcow2
+    [creator@host]$ ./q-image-create.sh upload --name "My CentOS image"
+                    --min-disk 10  disk.qcow2
 
 
 ### Step 6: Use the image to instantiate virtual machine instances
@@ -354,7 +365,7 @@ Upload the disk image, optionally giving it a name:
 Log into the [OpenStack Dashboard](https://dashboard.rc.nectar.org.au)
 and instantiate a virtual machine instance from the image.
 
-Configure the security groups to allow ssh access and you should be
+Configure the security groups to allow ssh access, and you should be
 able to ssh to the VM instance: as the user that was created,
 cloud-user, or root -- depending on how the image was configured.
 

@@ -11,23 +11,27 @@ provided by the _Queensland Cyber Infrastructure Foundation_
 Scripts
 -------
 
-### [q-storage-setup](q-storage-setup.md)
+### NFS mounting QRISdata Collection Storage allocations
 
-Setup a mount to access a QRISdata Collection Storage allocation
+The [q-storage-setup](q-storage-setup.md) script can be used
+to setup a mount to access a QRISdata Collection Storage allocation
 using NFS.
 
 Note: the allocation must be enabled for NFS access and the
 virtual machine instance must be running in Nectar's _QRIScloud_
 availability zone.
 
-### [q-image-create](q-image-create.md)
+### Creating OpenStack images for Nectar
 
-Utility to help with the process of creating a virtual machine images
+The [q-image-create](openstack-images/q-image-create.md) script can
+assist with the process of creating a virtual machine images
 for Nectar.
 
 For example, if you want to instantiate a virtual machine instance
 with a different operating system: one that someone else has not
 created a Nectar image for you to use.
+
+It has been tested with Linux and Windows images.
 
 Licence
 -------
