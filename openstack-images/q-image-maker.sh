@@ -182,11 +182,11 @@ fi
 # Remaining arguments (for the command and diskImage)
 
 if [ $# -eq 0 ]; then
-  echo "$EXE: usage error: missing command (-h for help)" >&2
+  echo "$EXE: usage error: missing command and imageFile (-h for help)" >&2
   exit 2
 elif [ $# -eq 1 ]; then
-  echo "$EXE: usage error: missing imageFile (-h for help)" >&2
-  exit 2
+  CMD="$1"
+  IMAGE=
 elif [ $# -eq 2 ]; then
   CMD="$1"
   IMAGE="$2"
@@ -206,6 +206,11 @@ fi
 
 #----------------
 # Check disk image filename that was provided
+
+if [ -z "$IMAGE" ]; then
+  echo "$EXE: usage error: missing imageFile (-h for help)" >&2
+  exit 2
+fi
 
 if [ "$CMD" = 'create' ]; then
   # Creating a disk image: it MUST NOT already exist
@@ -412,7 +417,7 @@ EOF
     echo "$EXE: error: QEMU failed" 2>&1
     exit 1
   fi
-  echo "PID: $QEMU_PID" >> "$LOGFILE"
+  echo "# PID: $QEMU_PID" >> "$LOGFILE"
 
   # Output instructions
 
@@ -424,7 +429,7 @@ Guest VM is running. Connect to it using VNC (via an SSH tunnel if necessary):
   VNC display: $VNC_DISPLAY (port $PORT)
   Authentication: no password
 
-When finished using the guest, either:
+When finished using the guest, terminate the VM by either:
   a. shutdown the guest; or
   b. enter "quit" in the QEMU console (Ctrl-Alt-2 in the VNC client).
 

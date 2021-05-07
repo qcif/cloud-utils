@@ -105,15 +105,16 @@ can be used with the image, and launching it might be slower.
 
 The default of 10 GiB disk is usually too small for most versions of
 Windows Server.  For example, Windows Server 2019 R2 needs more than
-17 GiB (it will install with 12 GiB, but there is insufficient space
-to install the updates)!
+17 GiB, and Windows 10 Pro 20H2 needs more than 19 GiB (they will
+install less, but there is then insufficient space to install the
+updates)!
 
-Note: Windows Server 2020 (Insider Release) places a recovery
-partition after the main partition, which prevents the disk from being
-expanded (with either Cloudbase-Init or manually).  Maybe a future
-release of Cloudbase-Init will address this problem? Currently, April
-2021, a workaround is to make the disk image the same size as the disk
-on the virtual machine that will be instantiated.
+Note: Windows Server 2020 (Insider Release) and Windows 10 Pro 20H2
+places a recovery partition after the main partition, which prevents
+the disk from being expanded (with either Cloudbase-Init or manually).
+Maybe a future release of Cloudbase-Init will address this problem?
+Currently, April 2021, a workaround is to make the disk image the same
+size as the disk on the virtual machine that will be instantiated.
 
 The disk image will be in the default QEMU Copy-On-Write version 2
 "qcow2" format, which is required for it to be used as the boot

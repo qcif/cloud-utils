@@ -3,8 +3,6 @@
 # Setup NFS mounting of QRIScloud storage for QRIScloud virtual machine
 # instances.
 #
-# Copyright (C) 2013-2021 Queensland Cyber Infrastructure Foundation Ltd.
-#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -17,6 +15,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see {http://www.gnu.org/licenses/}.
+#
+# Copyright (C) 2013-2021 Queensland Cyber Infrastructure Foundation Ltd.
 #----------------------------------------------------------------
 
 PROGRAM='q-storage-setup'
@@ -37,7 +37,12 @@ MOUNT_OPTIONS_APT=
 
 MOUNT_AUTOFS_EXTRA='bg'
 
-NFS_SERVERS="10.255.120.200 10.255.120.226 10.255.122.70"
+# NFS Servers in order of preference
+#
+# Currently (April 2021) all NFS servers have the same mounts, but
+# are load balanced differently.
+
+NFS_SERVERS="10.255.120.225 10.255.120.200"
 
 #----------------------------------------------------------------
 # Error checking
@@ -107,13 +112,18 @@ nfs_export_from_showmount () {
 
       NUM_MATCHES=$(echo "$MATCH" | wc -l)
 
-      if [ -n "$RESULT" ] || [ "$NUM_MATCHES" -ne 1 ]; then
-        # Matches from another NFS server or multiple matches were found
-        echo "$EXE: error: $ALLOC has multiple NFS exports (please contact QRIScloud Support)" >&2
+      if [ "$NUM_MATCHES" -ne 1 ]; then
+        # Multiple matches found from the same server
+        echo "$EXE: error: $ALLOC has multiple NFS exports from $NFS_SERVER (please contact QRIScloud Support)" >&2
         exit 1
       fi
 
       RESULT="$NFS_SERVER:$MATCH"
+
+      # Stop at the first one found, since all NFS servers have the same mounts
+      # but are load balanced differently.
+
+      break
     fi
   done
 
@@ -160,13 +170,13 @@ Options:
           default for autofs: $DEFAULT_AUTO_MOUNT_DIR
           default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR
 
-  -v      show extra information
-  -V      show version
-  -h      show this message
+  -v      output extra information when running
+  -V      display version information and exit
+  -h      display this help and exit
 $ALLOC_SPEC_HELP
 "
 
-LONG_HELP="Usage: $$EXE_EXT [options] allocSpecs...
+LONG_HELP="Usage: $EXE_EXT [options] allocSpecs...
 Options:
   -a | --autofs     configure and use autofs (default)
   -m | --mount      perform ad hoc mount
@@ -177,9 +187,9 @@ Options:
                     default for autofs: $DEFAULT_AUTO_MOUNT_DIR
                     default for mount or umount: $DEFAULT_ADHOC_MOUNT_DIR
 
-  -v | --verbose    show extra information
-  -V | --version    show version
-  -h | --help       show this message
+  -v | --verbose    output extra information when running
+       --version    display version information and exit
+  -h | --help       display this help and exit
 $ALLOC_SPEC_HELP
 "
 
@@ -435,12 +445,12 @@ if [ $ACTION != 'umount' ]; then
   # Don't do this if unmounting, since it is assumed the script has already
   # been run at least once (to mount it) and therefore these packages have
   # already been installed.
-  
+
   #----------------
   # Install NFS client
-  
+
   if [ "$FLAVOUR" = 'dnf' ]; then
-  
+
     # nfs-utils
     if ! rpm -q nfs-utils > /dev/null; then
       # Package not installed: install it
@@ -449,9 +459,9 @@ if [ $ACTION != 'umount' ]; then
       fi
       dnf -y install "nfs-utils" >>"$LOG" 2>&1
     fi
-  
+
   elif [ "$FLAVOUR" = 'yum' ]; then
-  
+
     # nfs-utils
     if ! rpm -q nfs-utils > /dev/null; then
       # Package not installed: install it
@@ -460,9 +470,9 @@ if [ $ACTION != 'umount' ]; then
       fi
       yum -y install "nfs-utils" >>"$LOG" 2>&1
     fi
-  
+
   elif [ "$FLAVOUR" = 'apt' ]; then
-  
+
     # nfs-common
     if ! dpkg-query --status "nfs-common"  >/dev/null 2>&1; then
       # Package not installed: install it
@@ -471,16 +481,16 @@ if [ $ACTION != 'umount' ]; then
       fi
       apt-get -y --no-upgrade install "nfs-common" >>"$LOG" 2>&1
     fi
-  
+
   else
     echo "$EXE: internal error: bad install flavour: $FLAVOUR" >&2
     rm "$LOG"
     exit 3
   fi
-  
+
   #----------------
   # Install ifup and ifdown
-  
+
   if [ "$FLAVOUR" = 'yum' ]; then
 
     # Check: all supported distributions of CentOS have ifup/ifdown
@@ -510,9 +520,9 @@ if [ $ACTION != 'umount' ]; then
       rm "$LOG"
       exit 1
     fi
-    
+
   elif [ "$FLAVOUR" = 'apt' ]; then
-  
+
     # Need ifup/ifdown
 
     # It is not installed by default in newer distributions
@@ -537,7 +547,7 @@ if [ $ACTION != 'umount' ]; then
       rm "$LOG"
       exit 1
     fi
-  
+
   else
     echo "$EXE: internal error: bad install flavour: $FLAVOUR" >&2
     rm "$LOG"
@@ -558,9 +568,9 @@ if [ $ACTION = 'autofs' ]; then
   # No sense installing autofs if they might not want it.
 
   if [ "$FLAVOUR" = 'dnf' ]; then
-  
+
     # Install autofs
-  
+
     if ! rpm -q autofs > /dev/null; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
@@ -568,11 +578,11 @@ if [ $ACTION = 'autofs' ]; then
       fi
       dnf -y install "autofs" >>"$LOG" 2>&1
     fi
-  
+
   elif [ "$FLAVOUR" = 'yum' ]; then
-  
+
     # Install autofs
-  
+
     if ! rpm -q autofs > /dev/null; then
       # Package not installed: install it
       if [ -n "$VERBOSE" ]; then
@@ -580,9 +590,9 @@ if [ $ACTION = 'autofs' ]; then
       fi
       yum -y install "autofs" >>"$LOG" 2>&1
     fi
-  
+
   elif [ "$FLAVOUR" = 'apt' ]; then
-  
+
     # Install autofs
 
     if ! dpkg-query --status "autofs"  >/dev/null 2>&1; then
@@ -592,7 +602,7 @@ if [ $ACTION = 'autofs' ]; then
       fi
       apt-get -y --no-upgrade install "autofs" >>"$LOG" 2>&1
     fi
-  
+
   else
     echo "$EXE: internal error: bad install flavour: $FLAVOUR" >&2
     rm "$LOG"
@@ -960,39 +970,39 @@ if [ $ACTION = 'autofs' ] || [ $ACTION = 'mount' ]; then
   # Create group and users (needed for both autofs and ad hoc mounting)
 
   if [ "$FLAVOUR" = 'dnf' ] || [ "$FLAVOUR" = 'yum' ]; then
-  
+
     if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
       # Group 48 does not exist: create it
       groupadd --gid 48 apache
     fi
-  
+
     if ! grep -q "^[^:]*:[^:]*:48:" /etc/passwd; then
       # User 48 does not exist: create it
       adduser --uid 48 --gid 48 --comment "Apache" \
               --no-create-home --shell /sbin/nologin apache
     fi
-  
+
     for NFS_EXPORT in $EXPORT_PATHS; do
       ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
-  
+
       NUM=$(echo "$ALLOC" | sed s/Q0*//)
-  
+
       # Note: admin user was 55931, but users now changed to 540xx
       ID_NUMBER=$(( 54000 + NUM ))
-  
+
       if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
         # User does not exist: create it
         adduser --uid "$ID_NUMBER" --comment "Allocation $ALLOC" "q$NUM"
       fi
     done
-  
+
   elif [ "$FLAVOUR" = 'apt' ]; then
-  
+
     if ! grep -q "^[^:]*:[^:]*:48:" /etc/group; then
       # Group 48 does not exist: create it
       addgroup --gid 48 --gecos "Apache" --quiet apache
     fi
-  
+
     if ! grep -q "^[^:]*:[^:]*:48:" /etc/passwd; then
       # User 48 does not exist: create it
       adduser --uid 48 --gid 48 --gecos "Apache" --quiet \
@@ -1000,13 +1010,13 @@ if [ $ACTION = 'autofs' ] || [ $ACTION = 'mount' ]; then
               --shell /sbin/nologin --disabled-login \
               "apache"
     fi
-  
+
     for NFS_EXPORT in $EXPORT_PATHS; do
       ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
-  
+
       NUM=$(echo "$ALLOC" | sed s/Q0*//)
       ID_NUMBER=$(( 54000 + NUM ))
-  
+
       if ! grep -q "^[^:]*:[^:]*:$ID_NUMBER:" /etc/passwd; then
         # User does not exist: create it
         adduser --uid "$ID_NUMBER" --gecos "Allocation $ALLOC" --quiet \
@@ -1014,14 +1024,14 @@ if [ $ACTION = 'autofs' ] || [ $ACTION = 'mount' ]; then
                 "q$NUM"
       fi
     done
-  
+
   else
     echo "$EXE: internal error" >&2
     rm "$LOG"
     exit 3
   fi
 fi
-    
+
 #----------------------------------------------------------------
 # Ad hoc mounting
 
@@ -1067,15 +1077,15 @@ if [ $ACTION = 'mount' ]; then
     else
       echo "$EXE: ad hoc mount created: $DIR/$ALLOC"
     fi
-  done 
+  done
 
   if [ -n "$ERROR" ]; then
     rm "$LOG"
     exit 1
   fi
 
-#----------------------------------------------------------------
-# Ad hoc unmounting
+  #----------------------------------------------------------------
+  # Ad hoc unmounting
 
 elif [ $ACTION = 'umount' ]; then
   ERROR=
@@ -1105,7 +1115,7 @@ elif [ $ACTION = 'umount' ]; then
         echo "$EXE: warning: mount directory does not exist: $DIR/$ALLOC"
       fi
     fi
-  done 
+  done
   # Note: we do NOT attempt to remove the directory containing the mounts
 
   if [ -n "$ERROR" ]; then
@@ -1113,50 +1123,50 @@ elif [ $ACTION = 'umount' ]; then
     exit 1
   fi
 
-#----------------------------------------------------------------
+  #----------------------------------------------------------------
 
 elif [ $ACTION = 'autofs' ]; then
   # Configure autofs automounter
-  
+
   # Create direct map file
-  
+
   DMAP=/etc/auto.qriscloud
-  
+
   if [ -n "$VERBOSE" ]; then
     echo "$EXE: configuring autofs: creating direct map: $DMAP"
   fi
-  
+
   TMP="$DMAP".tmp-$$
-  
+
   echo "# autofs mounts for storage" > "$TMP"
-  
+
   for NFS_EXPORT in $EXPORT_PATHS; do
     ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
-  
+
     echo "$DIR/$ALLOC -$MOUNT_OPTIONS,$MOUNT_AUTOFS_EXTRA $NFS_EXPORT" >> "$TMP"
   done
-  
+
   mv "$TMP" "$DMAP"
-  
+
   # Modify master map file
-  
+
   if ! grep -q "^/- file:$DMAP\$" /etc/auto.master; then
     # Add entry to the master map, because it is not yet in there
-  
+
     if [ -n "$VERBOSE" ]; then
       echo "$EXE: configuring autofs: modifying master: /etc/auto.master"
     fi
     echo "/- file:$DMAP" >> /etc/auto.master
   fi
-  
+
   # Restart autofs service (so it uses the new configuration)
-  
+
   if [ -n "$VERBOSE" ]; then
     echo "$EXE: configuring autofs: autofs service: restarting..."
   fi
   echo >>"$LOG"
   echo "$EXE: Restarting autofs service..." >>"$LOG"
-  
+
   if which systemctl >/dev/null 2>&1; then
     # Systemd is used (e.g. CentOS 7)
     systemctl enable autofs.service  >>"$LOG" 2>&1
@@ -1165,19 +1175,19 @@ elif [ $ACTION = 'autofs' ]; then
     # Init.d is used (e.g. CentOS 6)
     service autofs restart  >>"$LOG" 2>&1
   fi
-  
+
   if [ -n "$VERBOSE" ]; then
     echo "$EXE: configuring autofs: autofs service: restarted"
   fi
-  
+
   # Check mounts work
-  
+
   sleep 1  # needed, otherwise sometimes the mounts fail the test below
-  
+
   ERROR=
   for NFS_EXPORT in $EXPORT_PATHS; do
     ALLOC=$(alloc_from_nfs_path "$NFS_EXPORT")
-  
+
     if ! ls "$DIR/$ALLOC" >/dev/null 2>&1; then
       echo "$EXE: failed to mount: $DIR/$ALLOC" >>"$LOG"
       echo "$EXE: error: autofs configured, but didn't mount: $DIR/$ALLOC" >&2
@@ -1187,23 +1197,23 @@ elif [ $ACTION = 'autofs' ]; then
       echo "$EXE: autofs mount successful: $DIR/$ALLOC"
     fi
   done
-  
+
   if [ -n "$ERROR" ]; then
     # Unsuccessful: leave log file
-  
+
     cat >&2 <<EOF
     Failures to mount could be because the NFS server is highly loaded.
     If the problem persists, please contact QRIScloud Support.
 EOF
-  
+
     echo "$EXE: error \(see $LOG for details\)" >&2
     exit 1
   fi
 
 else
 
-#----------------------------------------------------------------
-# Bad ACTION  
+  #----------------------------------------------------------------
+  # Bad ACTION
 
   echo "$EXE: internal error: bad action: $ACTION" >&2
   rm "$LOG"

@@ -24,7 +24,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-gui-setup'
-VERSION='2.0.0'
+VERSION='1.0.1'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -40,38 +40,41 @@ QUIET=
 getopt -T > /dev/null
 if [ $? -eq 4 ]; then
   # GNU enhanced getopt is available
-  ARGS=$(getopt --name "$EXE_EXT" --long help,password:,force,quiet,verbose --options hp:fqv -- "$@")
+  ARGS=$(getopt --name "$EXE_EXT" --long help,password:,force,quiet,verbose,version --options hp:fqvV -- "$@")
 else
   # Original getopt is available (no long option names nor whitespace)
-  ARGS=$(getopt hp:fqv "$@")
+  ARGS=$(getopt hp:fqvV "$@")
 fi
 if [ $? -ne 0 ]; then
   echo "$EXE: usage error (use -h for help)" >&2
-  exit 1
+  exit 2
 fi
 eval set -- $ARGS
 
 while [ $# -gt 0 ]; do
-    case "$1" in
-        -h | --help)     HELP=yes;;
-        -p | --password) PASSWORD="$2"; shift;;
-        -f | --force)    FORCE=yes;;
-        -q | --quiet)    QUIET=yes;;
-        -v | --verbose)  VERBOSE=yes;;
-        --version)       echo "$PROGRAM $VERSION"; exit 0 ;;
-        --)              shift; break;;
-    esac
-    shift
+  case "$1" in
+    -p | --password) PASSWORD="$2"; shift;;
+    -f | --force)    FORCE=yes;;
+    -q | --quiet)    QUIET=yes;;
+    -v | --verbose)  VERBOSE=yes;;
+    -V | --version)  echo "$PROGRAM $VERSION"; exit 0;;
+    -h | --help)     HELP=yes;;
+    --)              shift; break;;
+  esac
+  shift
 done
 
 if [ -n "$HELP" ]; then
-  echo "Usage: $EXE_EXT [options] userNames..."
-  echo "Options:"
-  echo "  -p | --password str  use this VNC password instead of a random one"
-  echo "  -f | --force         run on untested system (use with caution)"
-  echo "  -q | --quiet         suppress status output"
-  echo "  -v | --verbose       output extra information"
-  echo "  -h | --help          show this message"
+  cat <<EOF
+Usage: $EXE_EXT [options] userNames...
+Options:
+  -p | --password str  use this VNC password instead of a random one
+  -f | --force         run on untested system (use with caution)
+  -q | --quiet         suppress status output
+  -v | --verbose       output extra information when running
+       --version       display version information and exit
+  -h | --help          display this help and exit
+EOF
   exit 0
 fi
 
@@ -100,8 +103,8 @@ if [ -z "$FORCE" ]; then
     ISSUE=$(head -1 /etc/issue)
   fi
   if [ "$ISSUE" != 'CentOS release 6.4 (Final)' ] \
-		  && [ "$ISSUE" != 'CentOS release 6.9 (Final)' ] \
-		  && [ "$ISSUE" != 'Scientific Linux release 6.4 (Carbon)' ]; then
+       && [ "$ISSUE" != 'CentOS release 6.9 (Final)' ] \
+       && [ "$ISSUE" != 'Scientific Linux release 6.4 (Carbon)' ]; then
     echo "$EXE: error: unsupported distribution: $ISSUE (use --force?)"
     exit 1
   fi
@@ -110,7 +113,7 @@ fi
 # Check if run with necessary privileges
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "$EXE: this script requires root privileges" >&2
+  echo "$EXE: error: this script requires root privileges" >&2
   exit 1
 fi
 
@@ -120,7 +123,7 @@ ERROR=
 for USERNAME in "$@"
 do
   if ! id "$USERNAME" > /dev/null 2>&1; then
-    echo "Error: user does not exist: $USERNAME" >&2
+    echo "$EXE: error: user does not exist: $USERNAME" >&2
     ERROR=1
   fi
 done
@@ -232,7 +235,7 @@ VNC_CONFIG='/etc/sysconfig/vncservers'
 # Check that VNC server configuration file is present
 
 if [ ! -f "$VNC_CONFIG" ]; then
-  echo "$EXE: error: VNC server not installed correctly: config file missing: $VNC_CONFIG" >&2
+  echo "$EXE: error: VNC server not installed correctly: config missing: $VNC_CONFIG" >&2
   exit 1
 fi
 
