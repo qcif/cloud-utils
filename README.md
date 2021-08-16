@@ -23,7 +23,7 @@ availability zone.
 
 ### Creating OpenStack images for Nectar
 
-The [q-image-create](openstack-images/q-image-create.md) script can
+The [q-image-maker](openstack-images/q-image-maker.md) script can
 assist with the process of creating a virtual machine images
 for Nectar.
 
@@ -31,7 +31,9 @@ For example, if you want to instantiate a virtual machine instance
 with a different operating system: one that someone else has not
 created a Nectar image for you to use.
 
-It has been tested with Linux and Windows images.
+It has been used to create Linux and Windows images.
+
+See the [openstack-images](tree/master/openstack-images) folder for details.
 
 Licence
 -------

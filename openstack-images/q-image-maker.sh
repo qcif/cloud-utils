@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.0.0'
+VERSION='2.0.1'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -163,7 +163,7 @@ Options for upload:
   -n | --name imageName  name of glance image (default: "$DEFAULT_IMAGE_NAME_PREFIX <name> <time>")
   -w | --windows         set os_type property to windows (default: linux)
        --min-ram size    minimum RAM size in MiB (default: $DEFAULT_INSTANCE_MIN_RAM_MIB)
-       --min-disk size   minimum disk size in GiB (default: obtained from image file)
+       --min-disk size   minimum disk size in GiB (default: from image file)
 
 Common options:
   -v | --verbose         output extra information when running
@@ -427,7 +427,7 @@ EOF
 
 Guest VM is running. Connect to it using VNC (via an SSH tunnel if necessary):
   VNC display: $VNC_DISPLAY (port $PORT)
-  Authentication: no password
+  Authentication: VNC password not used (not VNC password with an empty string)
 
 When finished using the guest, terminate the VM by either:
   a. shutdown the guest; or

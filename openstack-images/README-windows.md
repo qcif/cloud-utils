@@ -11,7 +11,7 @@ Requirements
 ------------
 
 - Local machine, with a ssh client and a VNC client.
-- Creation host, with QEMU and the OpenStack client (e.g. a [configured VM instance](image-init.md)).
+- Creation host, with QEMU and the OpenStack client (e.g. a [configured VM instance](README-init.md)).
 - Installation ISO image for Microsoft Windows Server 2020.
 - VirtIO drivers for Windows ISO image.
 - Suitable licence for Microsoft Windows Server 2020 (optinal for testing).
@@ -119,11 +119,14 @@ size as the disk on the virtual machine that will be instantiated.
 The disk image will be in the default QEMU Copy-On-Write version 2
 "qcow2" format, which is required for it to be used as the boot
 disk. If the image will be used on volume storage, the "raw" format
-needs to be used.
+needs to be used. Use the `--format` option to set the format; use the
+`--help` option or read the [q-image-maker
+manual](https://github.com/qcif/cloud-utils/blob/master/openstack-images/q-image-maker.md)
+(a Markdown file from the GitHub repository) for details.
 
 The VNC server is listening by default on display 0 (port 5900). Use a
 different display if there is already a VNC server running on that
-display.
+display. Use the `--display` option to change the display number.
 
 The script runs _qemu-kvm_ in the background with _nohup_. So you can
 log out of the creation host and it will continue running.
@@ -164,7 +167,8 @@ attention to how the disk is partitioned.
     (Desktop Experience)" or "Windows Server 2020 Datacentre (Desktop
     Experience)". They do not apply to the non-desktop editions
     (previously called "server core editions") that do not have a
-    Windows graphical environment.
+    Windows graphical environment. The non-desktop editions are for
+    use with remote management tools and/or the command line.
 
 5. Read the licence terms and, if you accept them, check the "I accept
    the Microsoft Software Licence Terms" checkbox and press the "Next" button.
@@ -173,7 +177,7 @@ attention to how the disk is partitioned.
    not an upgrade.
 
 Initially, there won't be any drives to install Windows on, because
-the disk drivers for them have not been loaded.
+Windows does not come with drivers for the VirtIO virtual disk drives.
 
 #### 2d. Use the VirtIO disk drivers
 
@@ -193,7 +197,12 @@ No drives will be available until the VirtIO drivers are loaded.
 
      A "Drive 0 Unallocated Space" will be detected. If a small disk
      image is being used, there may be a message claiming more space
-     is recommended.
+     is recommended. This may or may not be a problem, depending on
+     the purpose of the image. That is, depending on exactly how much
+     space is available, a successful installation might still be
+     possible. But it is possible for it to Windows to be installed,
+     but there will not be enough space to install updates and/or
+     additional applications.
 
 5. Press "Next" and Wait for the installation to finish. (About 20
    minutes.)
@@ -201,20 +210,39 @@ No drives will be available until the VirtIO drivers are loaded.
 6. Set the administrator password and press the "Finish" button.
 
      This administrator password will be reset by either _cloud-init_
-     or _sysprep_ (used as a final step when preparing the image).
+     or _sysprep_ (used as a final step when preparing the image).  So
+     this password is only for temporary use, while the image is being
+     created, and it can be forgotten after that.
 
 #### 2e. VirtIO network drivers
+
+Note: some versions of Windows may strongly suggest that connecting to
+the Internet is desirable during the installation process.  But it
+should be possible to say there is no Internet connection, and to
+proceed with the installation without it. The VirtIO network driver
+(unlike the VirtIO disk driver) is installed _after_ the Windows
+installation process has been fully completed.
 
 Install the VirtIO network drivers to use the virtual network
 interfaces.
 
-1. Type Ctrl-Alt-Delete into the VNC session to sign in.
-   The VNC client probably has a special feature to
-    do this (e.g. the _Command_ > _Ctrl-Alt-Del_ menu item in
-    the _Screens_ application).
+1. Type Ctrl-Alt-Delete into the VNC session to sign in.  The VNC
+   client should have a special feature to do this (e.g.  in the macOS
+   _Screens_ application, use the _Command_ > _Ctrl-Alt-Del_ menu item),
+   since typing those keys would affect your local computer rather
+   than the guest system.
 
 2. Open the _Device Manager_, by launching the _Control Panel_ and the
    selecting _System and Security > Hardware > Device Manager_.
+
+    The "Hardware" link is in the navigation list on the left side of
+    the window.  In some versions of Windows, it is called "Hardware
+    and sound".
+
+    The _Control Panel_ is often hard to find, since Microsoft is
+    pushing users to their fancy, but limited, _Settings_ application.
+    It might be available as a tile on the Start menu, or is buried
+    under the "Windows Systems" folder of the list of all applications.
 
     Under "Other Devices" the Ethernet controller should appear as an
     "Unknown device" whose driver could not be found.
@@ -223,14 +251,20 @@ interfaces.
    (under the "Other devices" section). By double clicking on it, or
    right clicking on it and selecting Properties.
 
+    In some versions of Windows, it will be called "Ethernet
+    Controller" instead of "Unknown device". But it should still
+    have a yellow hazard triangle on its icon.
+
 4. Press the "Update Driver" button.
 
 5. Choose "Browse my computer for driver software".
 
 6. Press the "Browse..." button.
 
-7. Select the top level of the second CD Drive (E:) (i.e. do not need
-   to choose a subdirectory) and press the "OK" button.
+7. Select the top level of the second CD Drive (E:) (unlike for the
+   VirtIO disk driver, a specific subdirectory and file does not need
+       to be chosen for the VirtIO network driver) and press the "OK"
+   button.
 
 8. Ensure the "Include subfolders" checkbox is checked and press the
    "Next" button.
@@ -240,8 +274,10 @@ interfaces.
 
 9. Press the "Install" button.
 
-10. When prompted to "allow your PC to be discoverable by other PCs and
-    devices on this network", press the "no" button.
+10. When prompted to "allow your PC to be discoverable by other PCs
+    and devices on this network", press the "no" button. It is also
+    also possible to press "yes", but it is more secure to choose
+    "no"---unless that functionality is really needed.
 
 11. Press the "Close" to close the driver update success window.
 
@@ -250,6 +286,8 @@ interfaces.
 13. Close the Device Manager window.
 
 14. Close the Control Panel Hardware window.
+
+A Windows restart might be required for the network drivers to work.
 
 #### 2f. Time zone
 
@@ -285,7 +323,7 @@ turning off the display to save power and it is more likely to cause
 confusion when trying to use it.
 
 1. Open the Control Panel Power Options. Launch the Control Panel and select
-   Hardware > Change power-saving settings.
+   _Hardware > Change power-saving settings_.
 
 2. Select the radio button for the "High performance" power plan.
 
@@ -303,9 +341,11 @@ Turn on automatic updates and install the current updates.
 
 1. Open the Windows Start Menu.
 
-2. Choose Settings.
+2. Choose _Settings_ -- yes, the fancy, but limited, application and
+   not the _Control Panel. It is the gears icon in the Start menu.
 
-3. Choose Update & Security (the window may need to be scrolled up to see it).
+3. Choose _Update & Security_ (the window may need to be scrolled up
+   to see it).
 
 4. Press the "Check for updates" button, if needed.
 
@@ -323,15 +363,15 @@ Turn on automatic updates and install the current updates.
 
 ### Step 3: Optionally install additional software
 
-If additional configuration needs to be performed, restart the guest
+If additional configuration needs to be performed, run a guest
 virtual machine by booting off the disk image.
 
-    $ ./q-image-maker.sh --run image.qcow2
+    $ ./q-image-maker.sh run image.qcow2
 
 As before, connect to the VNC server (through the ssh tunnel) without
 using a VNC password.
 
-The `--iso` option can still be used to attach ISO images to install
+The `--iso` option can be used to attach ISO images to install
 software from.
 
 ### Step 4: cloud-init and sysprep
@@ -388,7 +428,8 @@ enable the out-of-box-experience when Windows is first started.  For
 example, it removes the administrator's password.
 
 If _sysprep_ was not run as the last stage of setting up
-CloudBase-Init, it will have to be run manually.
+CloudBase-Init, or CloudBase-Init is not installed, _sysprep_ will
+have to be run manually.
 
 1. Start Windows PowerShell.
 

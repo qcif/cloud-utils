@@ -30,13 +30,21 @@ script). Therefore, the creation host needs to be larger than that.
 
 ### Step 2: Install necessary packages
 
-The QEMU hypervisor is needed to create the image, and the OpenStack
-client (in particular the _glance_ component) is needed to upload the
-image.
+The following packages are required:
 
-Login to the creation host system and install those packages.  The
-following commands are for CentOS 7, different commands will be needed
-for other distributions:
+- QEMU hypervisor is needed to create the image; and
+
+- the OpenStackclient (in particular the _glance_ component) is needed
+to upload the image.
+
+Login to the creation host system and install those packages.
+
+The steps to install them will be different for different Linux
+distributions, and there are different approaches that can be taken.
+For example, the OpenStack client tools can be installed from a
+repository, or installed as Python packages (either installed into the
+system or in a Python virtual environment). Some example installation
+steps are shown below.
 
 CentOS 7:
 
@@ -50,6 +58,32 @@ CentOS 7:
     [ec2-user@host]$ sudo pip3 install --upgrade pip
 
     [ec2-user@host]$ sudo pip3 install python-openstackclient
+
+CentOS 8 Stream:
+
+**Note: currently the process does not work properly on CentOS 8 and
+CentOS 8 Stream. Everything works except the guest VM cannot connect
+to the Internet. So please use one of the other distributions until
+this problem is solved.**
+
+The same as for CentOS 7, except there might be an error saying:
+_Cannot uninstall 'PyYAML'. It is a distutils installed project and
+thus we cannot accurately determine which files belong to it which
+would lead to only a partial uninstall._
+
+If that error occurs, run the following to install PyYAML
+
+    [ec2-user@host]$ sudo pip3 install --ignore-installed PyYAML
+
+And then run the _pip install_ for _python-openstackclient_. Without
+the _--ignore-installed_ option, _pip_ attempts to uninstall the old
+version of the package before installing the new version. But that
+fails, as the error message says, because it does not know how to
+properly uninstall the old version. The option tells _pip_ to install
+the new version over the old version, without first uninstalling it.
+There are probably other ways around this too, such as uninstalling
+PyYAML first or installing the OpenStack client in a Python virtual
+environment.
 
 Ubuntu 20.04:
 
@@ -96,5 +130,5 @@ Log out of the creation host.
 See also
 --------
 
-- [Creating an image for CentOS Stream 8](image-linux.md)
-- [Creating an image for Windows Server 2012 R2](image-windows.md)
+- [Creating an image for Linux](README-linux.md)
+- [Creating an image for Microsoft Windows](README-windows.md)

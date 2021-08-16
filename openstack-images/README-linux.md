@@ -16,7 +16,7 @@ Requirements
 
 - OpenStack project to upload the image to.
 - Local system, with a ssh client and a VNC client.
-- Creation host system, with QEMU and glance (e.g. a [configured VM instance](image-init.md)).
+- Creation host system, with QEMU and glance (e.g. a [configured VM instance](README-init.md)).
 - Installation ISO image for the CentOS Stream 8.
 
 Process
@@ -324,7 +324,7 @@ accessed by typing Ctrl-Alt-2 into the VNC client).
 If additional configuration needs to be performed, restart the guest
 virtual machine by booting off the disk image.
 
-    $ ./q-image-maker.sh --run disk.qcow2
+    $ ./q-image-maker.sh run disk.qcow2
 
 As before, connect to the VNC server (through the ssh tunnel) with an
 empty password.
@@ -395,4 +395,4 @@ Future work
 Contact
 -------
 
-Please send feedback and queries to Hoylen Sue at <h.sue@qcif.edu.au>.
+Please send feedback and queries to Hoylen Sue at <hoylen.sue@qcif.edu.au>.
