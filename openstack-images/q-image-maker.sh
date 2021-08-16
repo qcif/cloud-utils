@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.0.1'
+VERSION='2.1.0'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -72,9 +72,9 @@ DEFAULT_INSTANCE_MIN_RAM_MIB=1024
 #----------------------------------------------------------------
 # Process command line
 
-SHORT_OPTS=cd:Df:hi:n:s:t:uVvwx:
+SHORT_OPTS=cd:Df:hi:ln:s:t:uVvwx:
 
-LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-ram:,help,version,verbose,debug
+LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-ram:,help,linux,version,verbose,windows,debug
 
 #----------------
 # Detect if GNU Enhanced getopt is available
@@ -93,14 +93,14 @@ if [ -n "$HAS_GNU_ENHANCED_GETOPT" ]; then
   # Use GNU enhanced getopt
   if ! getopt --name "$EXE" --long $LONG_OPTS --options $SHORT_OPTS -- "$@" >/dev/null; then
     echo "$EXE: usage error (use -h or --help for help)" >&2
-    exit "$STATUS_USAGE_ERROR"
+    exit 2
   fi
   ARGS=$(getopt --name "$EXE" --long $LONG_OPTS --options $SHORT_OPTS -- "$@")
 else
   # Use original getopt (no long option names, no whitespace, no sorting)
   if ! getopt $SHORT_OPTS "$@" >/dev/null; then
     echo "$EXE: usage error (use -h for help)" >&2
-    exit "$STATUS_USAGE_ERROR"
+    exit 2
   fi
   ARGS=$(getopt $SHORT_OPTS "$@")
 fi
@@ -115,7 +115,7 @@ DISK_SIZE_GIB=$DEFAULT_DISK_SIZE_GIB
 CREATE_DISK_FORMAT=$DEFAULT_CREATE_DISK_FORMAT
 DISK_INTERFACE=$DEFAULT_DISK_INTERFACE
 ISO_IMAGES=
-OS_TYPE=linux
+OS_TYPE=
 INSTANCE_MIN_RAM_MIB=$DEFAULT_INSTANCE_MIN_RAM_MIB
 INSTANCE_MIN_DISK_GIB=
 SHOW_VERSION=
@@ -132,7 +132,9 @@ while [ $# -gt 0 ]; do
     -d | --display)  VNC_DISPLAY="$2"; shift;;
     -x | --extra-opts) EXTRA_QEMU_OPTIONS="$2"; shift;;
 
+    -l | --linux)    OS_TYPE=linux;;
     -w | --windows)  OS_TYPE=windows;;
+    
     -n | --name)     IMAGE_NAME="$2"; shift;;
          --min-ram)  INSTANCE_MIN_RAM_MIB="$2"; shift;;
          --min-disk) INSTANCE_MIN_DISK_GIB="$2"; shift;;
@@ -161,7 +163,8 @@ Options create and run:
 
 Options for upload:
   -n | --name imageName  name of glance image (default: "$DEFAULT_IMAGE_NAME_PREFIX <name> <time>")
-  -w | --windows         set os_type property to windows (default: linux)
+  -l | --linux           set os_type property to linux
+  -w | --windows         set os_type property to windows
        --min-ram size    minimum RAM size in MiB (default: $DEFAULT_INSTANCE_MIN_RAM_MIB)
        --min-disk size   minimum disk size in GiB (default: from image file)
 
@@ -316,6 +319,18 @@ if [ -n "$INSTANCE_MIN_DISK_GIB" ]; then
   fi
 fi
 
+#----------------
+
+if [ "$CMD" = 'upload' ]; then
+  # Uploading
+
+  # Make sure either --linux or --windows is specified
+
+  if [ -z "$OS_TYPE" ]; then
+    echo "$EXE: usage error: --linux or --windows is required to upload">&2
+    exit 2
+  fi
+fi
 #----------------------------------------------------------------
 # Run the image in a virtual machine
 

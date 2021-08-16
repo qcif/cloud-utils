@@ -356,8 +356,7 @@ to upload.
 
 Upload the disk image, optionally giving it a name:
 
-    [creator@host]$ ./q-image-maker.sh upload --name "My CentOS image"
-                    --min-disk 10  disk.qcow2
+    [creator@host]$ ./q-image-maker.sh upload --linux --name "My CentOS image" --min-disk 10 disk.qcow2
 
 
 ### Step 6: Use the image to instantiate virtual machine instances

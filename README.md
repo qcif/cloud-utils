@@ -6,7 +6,7 @@ data storage.
 
 [QRIScloud](https://www.qriscloud.org.au) is a set of services
 provided by the _Queensland Cyber Infrastructure Foundation_
-([QCIF](http://www.qcif.edu.au)).
+([QCIF](https://www.qcif.edu.au)).
 
 Scripts
 -------
@@ -47,5 +47,5 @@ GNU General Public License for more details.
 Contact
 -------
 
-Please send feedback and queries to QRIScloud Support
-<https://support.qriscloud.org.au/>.
+Please send feedback and queries to
+[QRIScloud Support](https://support.qriscloud.org.au/).

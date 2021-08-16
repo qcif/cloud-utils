@@ -43,7 +43,8 @@ Create or run options:
   -e | --extra-opts str  extra options to pass to QEMU
 
 Upload options:
-  -O | --os-type value   set os_type property for image ("windows" or "linux")
+  -l | --linux           set os_type property for uploaded image to linux
+  -w | --windows         set os_type property for uploaded image to windows
 
 Common options:
   -v | --verbose         output extra information when running
@@ -51,7 +52,7 @@ Common options:
   -h | --help            display this help and exit
 
 
-
+Note: when uploading, it is mandatory to specified either --linux or --windows.
 
 Examples
 --------
