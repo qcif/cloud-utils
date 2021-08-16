@@ -33,7 +33,8 @@ created a Nectar image for you to use.
 
 It has been used to create Linux and Windows images.
 
-See the [openstack-images](tree/master/openstack-images) folder for details.
+See the [openstack-images](../../tree/master/openstack-images) folder
+for details.
 
 Licence
 -------
