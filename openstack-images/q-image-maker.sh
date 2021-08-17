@@ -45,8 +45,8 @@ DEFAULT_CREATE_DISK_FORMAT=qcow2
 #----------------
 # Configuration of the QEMU virtual machine instance.
 
-RAM_SIZE=4096
-NUM_CPUS=2
+DEFAULT_NUM_CPUS=2
+DEFAULT_RAM_SIZE=4096 # MiB
 
 # The host must have more RAM and CPU cores than the above!
 # More RAM/CPU doesn't really change how long it takes to install the OS,
@@ -74,7 +74,7 @@ DEFAULT_INSTANCE_MIN_RAM_MIB=1024
 
 SHORT_OPTS=cd:Df:hi:ln:s:t:uVvwx:
 
-LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,help,linux,version,verbose,windows,debug
+LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,cpu:,ram:,help,linux,version,verbose,windows,debug
 
 #----------------
 # Detect if GNU Enhanced getopt is available
@@ -114,6 +114,8 @@ VNC_DISPLAY=$DEFAULT_VNC_DISPLAY
 DISK_SIZE_GIB=$DEFAULT_DISK_SIZE_GIB
 CREATE_DISK_FORMAT=$DEFAULT_CREATE_DISK_FORMAT
 DISK_INTERFACE=$DEFAULT_DISK_INTERFACE
+NUM_CPUS=$DEFAULT_NUM_CPUS
+RAM_SIZE=$DEFAULT_RAM_SIZE
 ISO_IMAGES=
 OS_TYPE=
 INSTANCE_MIN_RAM_MIB=$DEFAULT_INSTANCE_MIN_RAM_MIB
@@ -130,11 +132,13 @@ while [ $# -gt 0 ]; do
     -t | --disk-type) DISK_INTERFACE="$2"; shift;;
     -i | --iso)      ISO_IMAGES="$ISO_IMAGES $2"; shift;;
     -d | --display)  VNC_DISPLAY="$2"; shift;;
+         --cpu)      NUM_CPUS="$2"; shift;;
+         --ram)      RAM_SIZE="$2"; shift;;
     -x | --extra-opts) EXTRA_QEMU_OPTIONS="$2"; shift;;
 
     -l | --linux)    OS_TYPE=linux;;
     -w | --windows)  OS_TYPE=windows;;
-    
+
     -n | --name)     IMAGE_NAME="$2"; shift;;
          --min-ram)  INSTANCE_MIN_RAM_MIB="$2"; shift;;
          --min-disk) INSTANCE_MIN_DISK_GIB="$2"; shift;;
@@ -160,11 +164,13 @@ Options create and run:
   -t | --disk-type inter QEMU disk interface: virtio or ide (default: $DEFAULT_DISK_INTERFACE)
   -x | --extra-opts str  extra QEMU options, for advanced use
   -d | --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)
+       --cpu CORES       number of cores assigned to run VM (default: $DEFAULT_NUM_CPUS)
+       --ram SIZE_MIB    memory assigned to run VM (default: $DEFAULT_RAM_SIZE MiB)
 
 Options for upload:
   -n | --name imageName  name of glance image (default: "$DEFAULT_IMAGE_NAME_PREFIX <name> <time>")
-  -l | --linux           set os_type property to linux
-  -w | --windows         set os_type property to windows
+  -l | --linux           set os_type property to linux (mandatory if no -w)
+  -w | --windows         set os_type property to windows (mandatory if no -l)
        --min-ram size    minimum RAM size in MiB (default: $DEFAULT_INSTANCE_MIN_RAM_MIB)
        --min-disk size   minimum disk size in GiB (default: from image file)
 
@@ -242,7 +248,7 @@ fi
 #----------------
 # Check disk size
 
-if ! echo "$DISK_SIZE_GIB" | grep -E '^[0-9]+$' >/dev/null; then
+if ! echo "$DISK_SIZE_GIB" | grep -qE '^[0-9]+$'; then
   echo "$EXE: usage error: bad disk size (expecting a number): $DISK_SIZE_GIB" >&2
   exit 2
 fi
@@ -288,15 +294,53 @@ done
 #----------------
 # Check VNC display number is a non-negative integer
 
-if ! echo "$VNC_DISPLAY" | grep -E '^[0-9]+$' >/dev/null ; then
+if ! echo "$VNC_DISPLAY" | grep -qE '^[0-9]+$'; then
   echo "$EXE: usage error: VNC display is not a +ve integer: $VNC_DISPLAY" >&2
+  exit 2
+fi
+
+#----------------
+# Check RAM size for running guest VM
+
+if ! echo "$RAM_SIZE" | grep -qE '^[0-9]+$'; then
+  echo "$EXE: usage error: RAM size is not a +ve integer: $RAM_SIZE" >&2
+  exit 2
+fi
+if [ "$RAM_SIZE" -lt 256 ]; then
+  echo "$EXE: usage error: RAM size is ridiculously small: $RAM_SIZE MiB" >&2
+  exit 2
+fi
+if [ "$RAM_SIZE" -gt $((64 * 1024))  ]; then
+  # Not really an error, but suspect an incorrect value has been provided
+  # since the guest VM is intended  be used to install software, and therefore
+  # should not require more than 64 GiB of RAM!
+  echo "$EXE: usage error: RAM size is ridiculously large: $RAM_SIZE MiB" >&2
+  exit 2
+fi
+
+#----------------
+# Check number of CPUs for running guest VM
+
+if ! echo "$NUM_CPUS" | grep -qE '^[0-9]+$'; then
+  echo "$EXE: usage error: number of CPUs is not a +ve integer: $NUM_CPUS" >&2
+  exit 2
+fi
+if [ "$NUM_CPUS" -lt 1 ]; then
+  echo "$EXE: usage error: need at least one CPU: $NUM_CPUS" >&2
+  exit 2
+fi
+if [ "$NUM_CPUS" -gt 16 ]; then
+  # Not really an error, but suspect an incorrect value has been provided
+  # since the guest VM is intended  be used to install software, and therefore
+  # should not require more than 16 cores.
+  echo "$EXE: usage error: number of CPUs is very large: $NUM_CPUS" >&2
   exit 2
 fi
 
 #----------------
 # Check minimum RAM size
 
-if ! echo "$INSTANCE_MIN_RAM_MIB" | grep -E '^[0-9]+$' >/dev/null; then
+if ! echo "$INSTANCE_MIN_RAM_MIB" | grep -qE '^[0-9]+$'; then
   echo "$EXE: usage error: minimum RAM size: bad number: $INSTANCE_MIN_RAM_MIB" >&2
   exit 2
 fi
@@ -309,7 +353,7 @@ fi
 # Check minimum disk size
 
 if [ -n "$INSTANCE_MIN_DISK_GIB" ]; then
-  if ! echo "$INSTANCE_MIN_DISK_GIB" | grep -E '^[0-9]+$' >/dev/null; then
+  if ! echo "$INSTANCE_MIN_DISK_GIB" | grep -qE '^[0-9]+$'; then
     echo "$EXE: usage error: minimum disk size: bad number: $INSTANCE_MIN_DISK_GIB" >&2
     exit 2
   fi
@@ -350,7 +394,7 @@ run_vm () {
     QEMU_EXEC="$QEMU_EXEC_2"
 
   else
-    echo "$EXE: error: program not found: $QEMU_EXEC_1 or $QEMU_EXEC_2" >&2
+    echo "$EXE: dependency error: program not found: $QEMU_EXEC_1 or $QEMU_EXEC_2" >&2
     echo "$EXE: error: check if the \"qemu-kvm\" package is installed" >&2
     exit 3
   fi
@@ -359,7 +403,7 @@ run_vm () {
 
   NO_VERT='virtual machine will be slow: no virtualization, using emulation'
 
-  if ! grep -E '(vmx|svm)' /proc/cpuinfo >/dev/null 2>&1; then
+  if ! grep -qE '(vmx|svm)' /proc/cpuinfo >/dev/null 2>&1; then
     # No Intel VT-x or AMD AMD-V extensions
     echo "$EXE: warning: $NO_VERT: CPU has no virtualization extension support" >&2
   elif [ ! -c '/dev/kvm' ]; then
@@ -402,11 +446,11 @@ run_vm () {
 
   # Run QEMU in background (nohup so user can log out without stopping it)
 
-  if echo "$IMAGE" | grep '\.qcow2$' >/dev/null; then
+  if echo "$IMAGE" | grep -q '\.qcow2$'; then
     BASE=$(basename "$IMAGE" .qcow2)
-  elif echo "$IMAGE" | grep '\.raw$' >/dev/null; then
+  elif echo "$IMAGE" | grep -q '\.raw$'; then
     BASE=$(basename "$IMAGE" .raw)
-  elif echo "$IMAGE" | grep '\.img$' >/dev/null; then
+  elif echo "$IMAGE" | grep -q '\.img$'; then
     BASE=$(basename "$IMAGE" .img)
   else
     BASE=$(basename "$BASE")
@@ -467,7 +511,9 @@ do_create() {
   # Check for executable
 
   if ! which qemu-img >/dev/null 2>&1; then
-    echo "$EXE: error: program not found: qemu-img" >&2
+    echo "$EXE: dependency error: program not found: qemu-img" >&2
+    echo "$EXE: check if the \"qemu-kvm\" package is installed" >&2
+    exit 3
   fi
 
   # Create disk image
@@ -508,11 +554,11 @@ do_run() {
 
 do_upload() {
 
-  if echo "$IMAGE" | grep '\.qcow2$' >/dev/null; then
+  if echo "$IMAGE" | grep -q '\.qcow2$'; then
     BASE=$(basename "$IMAGE" .qcow2)
-  elif echo "$IMAGE" | grep '\.raw$' >/dev/null; then
+  elif echo "$IMAGE" | grep -q '\.raw$'; then
     BASE=$(basename "$IMAGE" .raw)
-  elif echo "$IMAGE" | grep '\.img$' >/dev/null; then
+  elif echo "$IMAGE" | grep -q '\.img$'; then
     BASE=$(basename "$IMAGE" .img)
   else
     BASE=$(basename "$IMAGE")
@@ -525,11 +571,14 @@ do_upload() {
   # Check for the needed programs
 
   if ! which openstack >/dev/null 2>&1; then
-    echo "$EXE: error: program not found: openstack" >&2
-    exit 1
+    echo "$EXE: dependency error: program not found: openstack" >&2
+    echo "$EXE: check if the OpenStack client programs is installed" >&2
+    exit 3
   fi
   if ! which qemu-img >/dev/null 2>&1; then
-    echo "$EXE: error: program not found: qemu-img" >&2
+    echo "$EXE: dependency error: program not found: qemu-img" >&2
+    echo "$EXE: check if the \"qemu-kvm\" package is installed" >&2
+    exit 3
   fi
 
   # Check RC environment variables have been set
@@ -545,11 +594,11 @@ do_upload() {
 
   # Detect disk image format
 
-  if echo "$IMAGE" | grep -i '\.gz$' > /dev/null; then
+  if echo "$IMAGE" | grep -qi '\.gz$'; then
     echo "$EXE: error: please un-gzip the file first: $IMAGE" >&2
     exti 1
   fi
-  if echo "$IMAGE" | grep -i '\.zip$' > /dev/null; then
+  if echo "$IMAGE" | grep -qi '\.zip$'; then
     echo "$EXE: error: please un-zip the file first: $IMAGE" >&2
     exti 1
   fi
@@ -561,7 +610,7 @@ do_upload() {
     exit 1
   fi
 
-  if echo "$IMAGE" | grep '\.iso$' > /dev/null; then
+  if echo "$IMAGE" | grep -qi '\.iso$'; then
     if [ "$UPLOAD_DISK_FORMAT" = 'raw' ]; then
       # Filename suggests it is an ISO image and qemu-img claims is raw, since
       # qemu-img cannot tell the difference between ISO and raw: upload as ISO
@@ -619,11 +668,24 @@ EOF
 
   START=$(date '+%s') # seconds past epoch
 
+  local _PROGRESS_OPT=--progress
+  # Only use --progress in versions of openstack that have it.
+  # It is in v5.5.0. Not sure if 5.0.0 has it or not, so this might need fixing.
+  if openstack --version | grep -q '^openstack 4\.' ; then
+     _PROGRESS_OPT=
+  elif  openstack --version | grep -q '^openstack 3\.' ; then
+     _PROGRESS_OPT=
+  elif  openstack --version | grep -q '^openstack 2\.' ; then
+     _PROGRESS_OPT=
+  elif  openstack --version | grep -q '^openstack 1\.' ; then
+     _PROGRESS_OPT=
+  fi
+
   if ! openstack image create \
        --container-format 'bare' \
        --disk-format $UPLOAD_DISK_FORMAT \
        --file "$IMAGE" \
-       --progress \
+       $_PROGRESS_OPT \
        --private \
        --min-disk "$INSTANCE_MIN_DISK_GIB" \
        --min-ram "$INSTANCE_MIN_RAM_MIB" \

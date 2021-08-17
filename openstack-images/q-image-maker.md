@@ -104,9 +104,30 @@ using the create or run commands.
 
 #####  Cannot set up guest memory 'pc.ram': Cannot allocate memory
 
-The RAM size for the guest is too large for the host. Use a creation
-host system with more memory. Alternatively, edit the script and
-reduce the RAM_SIZE variable.
+The RAM size for the guest is too large for the host.
+
+1. Check if there is not another guest virtual machine running. Stop
+   that other virtual machine before trying to run a new one.
+
+2. Decrease the amount of memory assigned to the guest virtual machine
+   using the `--ram` option. Use the help option to see the default
+   amount.
+
+3. Use a different creation host that has more memory.
+
+### qemu-img: Unable to initialize gcrypt
+
+An older version of _libcrypt_ is installed. Usually seen on CentOS 8.
+
+Update it. For example, run `yum update`.
+
+### warning: virtual machine will be slow
+
+> Warning: virtual machine will be slow: no virtualization, using
+> emulation: CPU has no virtualization extension support
+
+The host system does not have virtualization support, or it has not
+been enabled.
 
 See also
 --------
