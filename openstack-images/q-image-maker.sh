@@ -74,7 +74,7 @@ DEFAULT_INSTANCE_MIN_RAM_MIB=1024
 
 SHORT_OPTS=cd:Df:hi:ln:s:t:uVvwx:
 
-LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-ram:,help,linux,version,verbose,windows,debug
+LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,help,linux,version,verbose,windows,debug
 
 #----------------
 # Detect if GNU Enhanced getopt is available
