@@ -670,14 +670,10 @@ EOF
 
   local _PROGRESS_OPT=--progress
   # Only use --progress in versions of openstack that have it.
-  # It is in v5.5.0. Not sure if 5.0.0 has it or not, so this might need fixing.
-  if openstack --version | grep -q '^openstack 4\.' ; then
-     _PROGRESS_OPT=
-  elif  openstack --version | grep -q '^openstack 3\.' ; then
-     _PROGRESS_OPT=
-  elif  openstack --version | grep -q '^openstack 2\.' ; then
-     _PROGRESS_OPT=
-  elif  openstack --version | grep -q '^openstack 1\.' ; then
+  # In v5.5.0, but not sure if 5.0.0 has it or not, so this might need fixing.
+  # Note: --version outputs to stderr!
+  if openstack --version 2>&1 | grep -q '^openstack [1234]\.' ; then
+    # Does not have --progress option
      _PROGRESS_OPT=
   fi
 

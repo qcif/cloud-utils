@@ -2,7 +2,7 @@ Creating a Microsoft Windows image
 ==================================
 
 This document describes how to create a virtual machine instance of
-Microsoft Windows Server 2020 for OpenStack using a Linux host.
+_Microsoft Windows Server 2022_ for OpenStack using a Linux host.
 
 These steps may apply to other versions of Microsoft Windows with some
 modification.
@@ -12,9 +12,9 @@ Requirements
 
 - Local machine, with a ssh client and a VNC client.
 - Creation host, with QEMU and the OpenStack client (e.g. a [configured VM instance](README-init.md)).
-- Installation ISO image for Microsoft Windows Server 2020.
+- Installation ISO image for _Microsoft Windows Server 2022_.
 - VirtIO drivers for Windows ISO image.
-- Suitable licence for Microsoft Windows Server 2020 (optinal for testing).
+- Suitable licence for Microsoft Windows Server 2022 (optinal for testing).
 - OpenStack project to upload the image to.
 
 Note: the local machine can be the same machine as the creation host.
@@ -60,17 +60,14 @@ connect to a virtual machine running on the creation host.
 
 #### 1c. Get the VirtIO drivers ISO image
 
-Get a copy of the VirtIO drivers ISO image onto the creation host.
-The example commands uses _curl_ to download it from Red Hat
-<http://alt.fedoraproject.org/pub/alt/virtio-win/latest/images/bin/>. If
-_curl_ is not available, try using _wget_.
+Get a copy of the [VirtIO drivers](https://docs.fedoraproject.org/en-US/quick-docs/creating-windows-virtual-machines-using-virtio-drivers/index.html) ISO image onto the creation host.
+
+From the information on the GitHub [virtio-win-pkg-scripts](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md) repository,
+The _stable_ release of the virtio-win ISO image can be downloaded
+using _curl_ or _wget_:
 
     [creator@host]$ curl -L -O --progress-bar \
       https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
-
-https://docs.fedoraproject.org/en-US/quick-docs/creating-windows-virtual-machines-using-virtio-drivers/index.html
-
-https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md
 
 #### 1d. Get the script
 
@@ -95,13 +92,8 @@ ISO images:
                     --size 30  image.qcow2
 
 The disk image **must** be large enough to hold the operating system
-and any extra software installed on the image. Set the disk size in
-GiB using the `--size` option.  Since the image can be expanded to
-make full use of the virtual machine instance's disk, it is better to
-use a small disk size. Using a larger disk size doesn't affect the
-size of the image file, since that determined by the amount of actual
-data on the disk. But a larger disk image can limit which flavour VMs
-can be used with the image, and launching it might be slower.
+and any extra software installed on the image. Set the target disk size in
+GiB using the `--size` option.
 
 The default of 10 GiB disk is usually too small for most versions of
 Windows Server.  For example, Windows Server 2019 R2 needs more than
@@ -109,12 +101,28 @@ Windows Server.  For example, Windows Server 2019 R2 needs more than
 install less, but there is then insufficient space to install the
 updates)!
 
-Note: Windows Server 2020 (Insider Release) and Windows 10 Pro 20H2
-places a recovery partition after the main partition, which prevents
-the disk from being expanded (with either Cloudbase-Init or manually).
-Maybe a future release of Cloudbase-Init will address this problem?
-Currently, April 2021, a workaround is to make the disk image the same
-size as the disk on the virtual machine that will be instantiated.
+Images cannot be used with VM flavours where the size of the boot
+volume is smaller than the image's target size.  If the intention is
+for the image to be expanded to use the available boot volume, try to
+create images with a smaller target size, since they can be used with
+both small and large volumes. This is possible with operating systems
+like Windows 2019 R2 and older.
+
+**Important:** Images cannot be expanded to use the available boot
+volume for operating systems like Windows Server 2022 and Windows 10.
+Those operating systems have a second recovery partition after the
+main partition, which prevents the main partition to be expanded
+(either using Cloudbase-Init or manually). For these operating
+systems, the target size of the image should match exactly the boot
+volume it will be used with. If the target size is larger, the image
+cannot be launched. If the target size is smaller, the extra storage
+on the boot volume cannot be used.
+
+Currently, September 2021, a workaround is to make the disk image the
+same size as the disk on the virtual machine that will be
+instantiated. Maybe a future release of Cloudbase-Init will address
+this problem, but we do not know if expanding the main partition is
+even possible.
 
 The disk image will be in the default QEMU Copy-On-Write version 2
 "qcow2" format, which is required for it to be used as the boot
@@ -153,18 +161,19 @@ can be used to list and change the virtual CD-ROM (using the commands
 Install the guest operating system as normal, except pay special
 attention to how the disk is partitioned.
 
-1. Windows Setup: change the "Time and currency format" to "English
-   (Australia)" or the preferred format, and press the "Next" button.
+1. Windows Setup: set the install language (if possible), and change
+   the "Time and currency format" to "English (Australia)" or the
+   preferred format, and press the "Next" button.
 
 2. Press the "Install Now" button.
 
-3. Activate Windows: select "I don't have a product key".
+3. If prompted to Activate Windows, select "I don't have a product key".
 
 4. Select the operating system to install, and then press the "Next" button.
 
     The steps below might be slightly different for different versions
-    of Windows.  These steps are for "Windows Server 2020 Standard
-    (Desktop Experience)" or "Windows Server 2020 Datacentre (Desktop
+    of Windows.  These steps are for "Windows Server 2022 Standard
+    (Desktop Experience)" or "Windows Server 2022 Datacentre (Desktop
     Experience)". They do not apply to the non-desktop editions
     (previously called "server core editions") that do not have a
     Windows graphical environment. The non-desktop editions are for
@@ -173,15 +182,15 @@ attention to how the disk is partitioned.
 5. Read the licence terms and, if you accept them, check the "I accept
    the Microsoft Software Licence Terms" checkbox and press the "Next" button.
 
-6. Choose "Custom: install Windows only (advanced)", since this is
-   not an upgrade.
+6. Choose "Custom: Install Microsoft Server Operating System only
+   (advanced)", since this is not an upgrade.
 
 Initially, there won't be any drives to install Windows on, because
 Windows does not come with drivers for the VirtIO virtual disk drives.
 
 #### 2d. Use the VirtIO disk drivers
 
-No drives will be available until the VirtIO drivers are loaded.
+No drives will be available until the VirtIO disk drivers are loaded.
 
 1. Press the "Load Driver" button.
 
@@ -189,11 +198,12 @@ No drives will be available until the VirtIO drivers are loaded.
 
 3. Browse the second CD drive, and navigate to and select the
    directory that is most suitable for the version of Windows being
-   installed.  For example, the "E:\AMD64\2k19" directory.  Press the
+   installed.  For example, the "E:\AMD64\2k19R2" directory.  Press the
    "OK" button.
 
 4. The "Select the driver to install" dialog should detect the "Red
-   Hat VirtIO SCSI controller" driver. Select it and press the "Next" button.
+   Hat VirtIO SCSI controller" driver, and have selected it. Press the
+   "Next" button.
 
      A "Drive 0 Unallocated Space" will be detected. If a small disk
      image is being used, there may be a message claiming more space
@@ -231,6 +241,8 @@ interfaces.
    _Screens_ application, use the _Command_ > _Ctrl-Alt-Del_ menu item),
    since typing those keys would affect your local computer rather
    than the guest system.
+   
+    Sign in as the Administrator.
 
 2. Open the _Device Manager_, by launching the _Control Panel_ and the
    selecting _System and Security > Hardware > Device Manager_.
@@ -257,7 +269,7 @@ interfaces.
 
 4. Press the "Update Driver" button.
 
-5. Choose "Browse my computer for driver software".
+5. Choose "Browse my computer for drivers".
 
 6. Press the "Browse..." button.
 
@@ -270,22 +282,20 @@ interfaces.
    "Next" button.
 
      It should find the "Red Hat VirtIO Ethernet Adapter" driver
-     and automatically offer to install it.
+     and automatically install it.
 
-9. Press the "Install" button.
-
-10. When prompted to "allow your PC to be discoverable by other PCs
+9. When prompted to "allow your PC to be discoverable by other PCs
     and devices on this network", press the "no" button. It is also
     also possible to press "yes", but it is more secure to choose
     "no"---unless that functionality is really needed.
 
-11. Press the "Close" to close the driver update success window.
+10. Press the "Close" to close the driver update success window.
 
-12. Press the "Close" button to close the Ethernet Adapter Properties dialog.
+11. Press the "Close" button to close the Ethernet Adapter Properties dialog.
 
-13. Close the Device Manager window.
+12. Close the Device Manager window.
 
-14. Close the Control Panel Hardware window.
+13. Close the Control Panel Hardware window.
 
 A Windows restart might be required for the network drivers to work.
 
@@ -296,8 +306,6 @@ clock will be in the local time of the availability zone. Set the time
 zone in Windows to match (e.g. Brisbane +10:00 for QRIScloud).
 Unfortunately, if the image will be launched in multiple Availability
 Zones, the Windows timezone may be wrong for some of them.
-
-TODO: https://ask.openstack.org/en/question/52569/setting-a-default-locale/
 
 1. Open the _Date and Time settings_. Launch the _Control Panel_ and
    select _Clock and Region > Change the time zone_.
@@ -342,7 +350,7 @@ Turn on automatic updates and install the current updates.
 1. Open the Windows Start Menu.
 
 2. Choose _Settings_ -- yes, the fancy, but limited, application and
-   not the _Control Panel. It is the gears icon in the Start menu.
+   not the _Control Panel_. It is the gears icon in the Start menu.
 
 3. Choose _Update & Security_ (the window may need to be scrolled up
    to see it).
@@ -359,7 +367,12 @@ Turn on automatic updates and install the current updates.
 
 8. Press the "Restart now" button, if it appears.
 
-9. Log back into the Administrator account.
+9. Sign back into the Administrator account.
+
+Note: some updates are installed when Windows is shutdown or
+restarted. And some updates won't be available until other updates
+have been installed.  Restart Windows and check for updates a few
+times, before finalising the image.
 
 ### Step 3: Optionally install additional software
 
@@ -376,12 +389,20 @@ software from.
 
 ### Step 4: cloud-init and sysprep
 
-### 4a. cloud-init
+It is optional to install _Cloudbase-Init_ (previously called
+_cloud-init for Windows_).
 
-Install _CloudBase-Init_ (previously called _cloud-init for Windows_)
-to allow better integration with OpenStack.
+If configured properly, it allows the Windows virtual machine to
+integrate with OpenStack. It is beyond the scope of this document to
+describe how to configure it.
 
-1. Open a Web browser.
+Either install _Cloudbase-Init_, or use _sysprep_ without it.
+
+### 4a. Cloudbase-Init
+
+To intall _Cloudbase_Init_:
+
+1. Inside Windows, open a Web browser.
 
 2. Visit <https://cloudbase.it/cloudbase-init>
    (If needed, add www.cloudbase.it as a trusted domain.)
@@ -404,9 +425,10 @@ to allow better integration with OpenStack.
 7. Close the VNC client after the guest shutdown has finished.
 
 Don't worry about the installer file in the downloads directory:
-_sysprep_ will remove it as a part of resetting the account.
+_sysprep_ will remove it as a part of resetting the Administrator
+account.
 
-CloudBase-Init will create a new "Admin" account. Its password can be
+Cloudbase-Init will create a new "Admin" account. Its password can be
 obtained using the "Retrieve Password" action from the dashboard and
 decrypted it with:
 
@@ -428,7 +450,7 @@ enable the out-of-box-experience when Windows is first started.  For
 example, it removes the administrator's password.
 
 If _sysprep_ was not run as the last stage of setting up
-CloudBase-Init, or CloudBase-Init is not installed, _sysprep_ will
+Cloudbase-Init, or Cloudbase-Init is not installed, _sysprep_ will
 have to be run manually.
 
 1. Start Windows PowerShell.
@@ -451,7 +473,8 @@ Sysprep must be rerun on it.
 
 1. Open the OpenStack Dashboard in a Web browser.
 
-2. From the account menu (top right corner) chose "Settings".
+2. From the account menu (email address at the top right corner) chose
+   "Settings".
 
 3. Choose "Reset Password" from the left navigation area.
 
@@ -470,7 +493,7 @@ Sysprep must be rerun on it.
 4. Press the "Download OpenStack RC File" button and
    choose "OpenStack RC File".
 
-5. Uploade the file from your local to the creation host.
+5. Upload the RC file from where it was downloaded to the creation host.
 
 #### 5c. Setup credentials to connect to OpenStack
 
@@ -555,7 +578,11 @@ disks can be used for additional storage.
 
 #### Connect to the VM instance for the first time
 
-1. Go to the console for the VM instance in the dashboard.
+1. Go to the console for the VM instance in the Nectar dashboard.
+
+    From the left side navigation, select Compute > Instances. Then
+    select the instance, and then the "Console" tab at the top of the
+    page.
 
 2. Click on the gray area at the top or sides of the console, so
    keystrokes are sent to the console.
@@ -569,14 +596,18 @@ disks can be used for additional storage.
 5. Enter a new password for the administrator account and press
    the "Finish" button.
 
-6. Press the "Send CtrlAltDel" button and sign into Windows
+6. Press the "Send CtrlAltDel" button (top right) and sign into Windows
    using the Administrator password that was just created.
 
-7. When prompted, "do you want to find PCs, devices, and content on
-   this network, and automatically connect to devices like printers
-   and TVs?", press the "No" button.
+7. When prompted, "Do you want to allow your PC to be discoverable by
+   other PCs and devices on this network?", press the "No" button
+   unless there is a reason the feature is required.
 
 #### Expanding the boot disk
+
+**Note: this is not possible with newer versions of Windows that has an
+extra recovery partition. For example, it cannot be done with Windows
+Server 2022, Windows 10.**
 
 If using a disk or volume that is larger than the image size, it needs
 to be expanded to make use of the the entire space.
@@ -617,20 +648,25 @@ deleted the volume still remains.
 
 #### Enable remote access
 
+One option for remote access is to enable the built in Remote Desktop
+Protocol service.
+
 **Important: It is your responsibility to ensure the virtual machine
 instances are secure.**
 
 **Do not expose the Remote Desktop protocol to the wider Internet,
-because it has known security vulnerbilities.**
+because it has known security vulnerbilities. Use Nectar security
+group rules and other mechanisms to prevent untrusted hosts to connect
+to the VM instance.**
 
-1. Open the System Properties window. Launch the Control Panel and
-   select System and Security > Allow remote access.
+1. Open the System Properties window. Launch the _Control Panel_ and
+   select _System and Security_ > _Allow remote access_.
 
 2. Select the "Allow remote connections to this computer" radio button.
 
 3. Press the "OK" button to close the dialog that appears.  On some
    versions of Windows Server, this message is incorrect and the
-   Firewall does need further configuration.
+   Firewall does need additional configuration (see steps below).
 
 4. Leave the "Allow connections only from computers running Remote
    Desktop with Network Level Authentication (recommended)" checkbox
@@ -642,7 +678,7 @@ because it has known security vulnerbilities.**
    Security_ section, choose "Allow an app through Windows Firewall"
    (under the "Windows Defender Firewall" section).
 
-7. Check the "Public" checkbox for "Remote Desktop".
+7. Ensure the "Public" checkbox for "Remote Desktop" is checked.
 
 8. Press the "OK" button.
 
@@ -655,10 +691,11 @@ Mode (TCP-In)" for the "Public" profile and "Enable Rule".  Optionally
 also enable the public "Remote Desktop - User Mode (UDP-In)" rule.
 Note: the TCP rule is mandatory, UDP by itself is not sufficient.
 
-Note: By default, Echo requests are disabled on Windows Server
-2012. If you want to _ping_ the machine, you will need to enable the
-inbound firewall rules to allow it. This can only be done through the
-firewall advanced settings.
+Note: By default, Echo requests are disabled on Windows Server. If you
+want to _ping_ the machine, you will need to enable the inbound
+firewall rules to allow it. This can only be done through the firewall
+advanced settings: under _inbound rules_, enable all the "Core
+Networking Diagnostics - ICMP Echo Request" rules.
 
 See also
 --------
@@ -667,9 +704,9 @@ See also
 
 - [Sysprep](https://docs.microsoft.com/en-us/windows-hardware/manufacture/desktop/sysprep--system-preparation--overview)
 
-- [CloudBase-Init](https://cloudbase.it/cloudbase-init) main Website.
+- [Cloudbase-Init](https://cloudbase.it/cloudbase-init) main Website.
 
-- [CloudBase-Init documentation](https://cloudbase-init.readthedocs.io/en/latest/)
+- [Cloudbase-Init documentation](https://cloudbase-init.readthedocs.io/en/latest/)
 
 - [Windows Openstack imaging tools](https://github.com/cloudbase/windows-openstack-imaging-tools/) for use on a host running Windows.
 
