@@ -224,6 +224,10 @@ No drives will be available until the VirtIO disk drivers are loaded.
      this password is only for temporary use, while the image is being
      created, and it can be forgotten after that.
 
+     Passwords must contain characters from at least three of these
+     character classes: lowercase letters, uppercase letters, numbers
+     or symbols.
+
 #### 2e. VirtIO network drivers
 
 Note: some versions of Windows may strongly suggest that connecting to
@@ -284,10 +288,13 @@ interfaces.
      It should find the "Red Hat VirtIO Ethernet Adapter" driver
      and automatically install it.
 
-9. When prompted to "allow your PC to be discoverable by other PCs
-    and devices on this network", press the "no" button. It is also
-    also possible to press "yes", but it is more secure to choose
-    "no"---unless that functionality is really needed.
+9. When asked, "Do you want to allow your PC to be discoverable by
+   other PCs and devices on this network?", press the "No" button.  It
+   is more secure to not allow discovery, which is used for network
+   features such as file and printer sharing. Choosing "No" will also
+   set the network connection as "Public" (instead of "Private") and
+   that affects the behaviour of the _Windows Firewall_ and other
+   aspects of Windows.
 
 10. Press the "Close" to close the driver update success window.
 
@@ -398,7 +405,7 @@ describe how to configure it.
 
 Either install _Cloudbase-Init_, or use _sysprep_ without it.
 
-### 4a. Cloudbase-Init
+#### 4a. Option 1: Cloudbase-Init (and running sysprep with it)
 
 To intall _Cloudbase_Init_:
 
@@ -441,7 +448,7 @@ not an equivalent command in the OpenStack client):
 
     $ nova get-password <instance> <SSH_private_key>
 
-#### 4b. Sysprep
+#### 4b. Option 2: sysprep (without CloudBase-Init)
 
 Always run _sysprep_ as the last step of preparing the disk image.
 
@@ -453,7 +460,7 @@ If _sysprep_ was not run as the last stage of setting up
 Cloudbase-Init, or Cloudbase-Init is not installed, _sysprep_ will
 have to be run manually.
 
-1. Start Windows PowerShell.
+1. Start _Windows PowerShell_ or a Windows command line.
 
 2. Enter the following command:
 
