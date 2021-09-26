@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.1.0'
+VERSION='2.2.0'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -220,6 +220,10 @@ if [ -z "$IMAGE" ]; then
   echo "$EXE: usage error: missing imageFile (-h for help)" >&2
   exit 2
 fi
+
+# Change image filename into an absolute path
+
+IMAGE="$(cd $(dirname "$IMAGE"); pwd)/$(basename "$IMAGE")"
 
 if [ "$CMD" = 'create' ]; then
   # Creating a disk image: it MUST NOT already exist
@@ -446,22 +450,12 @@ run_vm () {
 
   # Run QEMU in background (nohup so user can log out without stopping it)
 
-  if echo "$IMAGE" | grep -q '\.qcow2$'; then
-    BASE=$(basename "$IMAGE" .qcow2)
-  elif echo "$IMAGE" | grep -q '\.raw$'; then
-    BASE=$(basename "$IMAGE" .raw)
-  elif echo "$IMAGE" | grep -q '\.img$'; then
-    BASE=$(basename "$IMAGE" .img)
-  else
-    BASE=$(basename "$BASE")
-  fi
-  LOGFILE="$(dirname "$IMAGE")/${BASE}.log"
+  local LOGFILE="${IMAGE}.log"
 
-  cat > "$LOGFILE" <<EOF
-# $PROGRAM [ $(date "+%F %T %z") ]
+  cat >> "$LOGFILE" <<EOF
 
+$(date "+%F %T %z"): QEMU: command:
 $COMMAND
-
 EOF
 
   nohup $COMMAND >> "$LOGFILE" 2>&1 &
@@ -471,12 +465,11 @@ EOF
   sleep 3
   if ! ps $QEMU_PID > /dev/null; then
     # QEMU process no longer running
-    cat "$LOGFILE"
-    rm "$LOGFILE"
-    echo "$EXE: error: QEMU failed" 2>&1
+    echo "$EXE: error: QEMU failed (see \"$LOGFILE\" for details)" 2>&1
     exit 1
   fi
-  echo "# PID: $QEMU_PID" >> "$LOGFILE"
+
+  echo "$(date "+%F %T %z"): QEMU: PID=$QEMU_PID" >> "$LOGFILE"
 
   # Output instructions
 
@@ -484,13 +477,18 @@ EOF
 
   cat <<EOF
 
-Guest VM is running. Connect to it using VNC (via an SSH tunnel if necessary):
+GUEST VM RUNNING
+
+Connect to the guest VM using VNC (via an SSH tunnel if necessary):
   VNC display: $VNC_DISPLAY (port $PORT)
   Authentication: VNC password not used (not VNC password with an empty string)
 
-When finished using the guest, terminate the VM by either:
-  a. shutdown the guest; or
-  b. enter "quit" in the QEMU console (Ctrl-Alt-2 in the VNC client).
+When finished using the guest VM, terminate it by either:
+  a. shutdown inside the guest operating system (this is the preferred method);
+  b. enter "quit" in the QEMU console (Ctrl-Alt-2 in the VNC client); or
+  c. run "kill $QEMU_PID".
+
+[Running under nohup: guest VM will continue to run after logout.]
 
 EOF
 }
@@ -554,17 +552,19 @@ do_run() {
 
 do_upload() {
 
-  if echo "$IMAGE" | grep -q '\.qcow2$'; then
-    BASE=$(basename "$IMAGE" .qcow2)
-  elif echo "$IMAGE" | grep -q '\.raw$'; then
-    BASE=$(basename "$IMAGE" .raw)
-  elif echo "$IMAGE" | grep -q '\.img$'; then
-    BASE=$(basename "$IMAGE" .img)
-  else
-    BASE=$(basename "$IMAGE")
-  fi
-
   if [ -z "$IMAGE_NAME" ]; then
+    local BASE=
+
+    if echo "$IMAGE" | grep -q '\.qcow2$'; then
+      BASE=$(basename "$IMAGE" .qcow2)
+    elif echo "$IMAGE" | grep -q '\.raw$'; then
+      BASE=$(basename "$IMAGE" .raw)
+    elif echo "$IMAGE" | grep -q '\.img$'; then
+      BASE=$(basename "$IMAGE" .img)
+    else
+      BASE=$(basename "$IMAGE")
+    fi
+
     IMAGE_NAME="$DEFAULT_IMAGE_NAME_PREFIX $BASE ($(date "+%F %H:%M %z"))"
   fi
 
@@ -588,7 +588,7 @@ do_upload() {
        || [ -z "$OS_PROJECT_NAME" ] \
        || [ -z "$OS_USERNAME" ] \
        || [ -z "$OS_PASSWORD" ]; then
-    echo "$EXE: error: environment not set, source an OpenStack RC file" >&2
+    echo "$EXE: error: OpenStack environment not set: source an OpenStack RC file" >&2
     exit 1
   fi
 
@@ -642,15 +642,21 @@ do_upload() {
     fi
   fi
 
-  # Upload
+  # Output start of upload message
 
   cat <<EOF
-Uploading "$IMAGE"
+
+UPLOADING IMAGE TO GLANCE
+
+Source:
+  File: $IMAGE
+Destination:
   Image name: $IMAGE_NAME
   Project: $OS_PROJECT_NAME
   Minimum disk size: $INSTANCE_MIN_DISK_GIB GiB
   Minimum RAM size: $INSTANCE_MIN_RAM_MIB MiB
   os_type: $OS_TYPE
+
 EOF
 
   #MD5_PROPERTY=
@@ -666,45 +672,135 @@ EOF
   #  echo "  SHA-256: $SHA256"
   #fi
 
-  START=$(date '+%s') # seconds past epoch
 
-  local _PROGRESS_OPT=--progress
-  # Only use --progress in versions of openstack that have it.
-  # In v5.5.0, but not sure if 5.0.0 has it or not, so this might need fixing.
-  # Note: --version outputs to stderr!
-  if openstack --version 2>&1 | grep -q '^openstack [1234]\.' ; then
-    # Does not have --progress option
-     _PROGRESS_OPT=
-  fi
+  # Determine log file name
 
-  if ! openstack image create \
-       --container-format 'bare' \
-       --disk-format $UPLOAD_DISK_FORMAT \
-       --file "$IMAGE" \
-       $_PROGRESS_OPT \
-       --private \
-       --min-disk "$INSTANCE_MIN_DISK_GIB" \
-       --min-ram "$INSTANCE_MIN_RAM_MIB" \
-       --project "$OS_PROJECT_ID" \
-       --property os_type=$OS_TYPE \
-       "$IMAGE_NAME" ; then
-    echo "$EXE: openstack image create failed" >&2
+  local LOGFILE="${IMAGE}.log"
+
+  # Determine upload script filename
+
+  local UPLOAD_SCRIPT="${IMAGE}.UPLOADING"
+
+  if [ -e "$UPLOAD_SCRIPT" ]; then
+    echo "$EXE: error: another upload is already in progress" 2>&1
+    echo "$EXE: error: for details see: $LOGFILE" 2>&1
     exit 1
   fi
 
-  # --insecure # ignore TLS server certificate
+  # Create script to upload with nohup (since it could take hours)
 
-  # Output how long it took
+  cat > "$UPLOAD_SCRIPT" <<EOF
+#!/bin/sh
+#
+# Upload script for "$IMAGE"
+#
+# The existance of this script also prevents another upload to start.
+# If the upload is aborted, manually delete this script to allow another
+# upload to start.
+#
+# This script will be automatically deleted, when the upload finishes.
+#
+# The output from this script is redirected to the log file:
+#   $LOGFILE
+# Look in there for error messages or the completed entry.
+#
+# $PROGRAM [ $(date "+%F %T %z") ]
+#----------------------------------------------------------------
 
-  NOW=$(date '+%s') # seconds past epoch
+# Produces the duration that has passed (e.g. "15s", "3m15s" or "2h5m30s")
 
-  SEC=$((NOW - START))
+_duration_from() {
+  # Usage: _duration_from start_seconds [end_seconds]
 
-  if [ $SEC -lt 60 ]; then
-    echo "Done. Uploaded in ${SEC}s"
+  local END
+  if [ \$# -gt 1 ]; then
+    END="\$2"
   else
-    echo "Done. Uploaded in $((SEC / 60))m $((SEC % 60))s"
+    END=\$(date '+%s')
   fi
+  local SEC=\$((\$END - \$1))
+
+  if [ \$SEC -lt 60 ]; then
+    echo "\${SEC}s"
+  elif [ \$SEC -lt 3600 ]; then
+    echo "\$((\$SEC / 60))m\$((\$SEC % 60))s"
+  else
+    echo "\$((\$SEC / 3600))h\$((\$SEC % 3600 / 60))m\$((\$SEC % 60))s"
+  fi
+}
+
+#----------------
+# Start
+
+START=\$(date '+%s') # seconds past epoch
+
+# In the message below the "grep" searches for the PID of the process
+# running this script, which will be the parent process ID (PPID) of
+# the Python process. The "cut" extracts out just the PID of the Python.
+# The -f and args in the "ps" command are not needed, but may be
+# useful for debugging.
+
+cat <<EOF1
+\$(date "+%F %T %z"): upload started
+  To abort the upload: kill the Python process running "openstack image create".
+  Its parent process is running the upload script: the parent PID is \$\$:
+    kill "\\\$(ps -ef -o ppid,pid,args | grep '^\$\$ ' | cut -d ' ' -f 2)"
+EOF1
+
+#----------------
+# Upload
+
+if ! openstack image create \
+     --container-format 'bare' \
+     --disk-format $UPLOAD_DISK_FORMAT \
+     --file "$IMAGE" \
+     --private \
+     --min-disk "$INSTANCE_MIN_DISK_GIB" \
+     --min-ram "$INSTANCE_MIN_RAM_MIB" \
+     --project "$OS_PROJECT_ID" \
+     --property os_type=$OS_TYPE \
+     "$IMAGE_NAME" ; then
+  echo "\$(date "+%F %T %z"): error: openstack image create failed" >&2
+  rm -f "$UPLOAD_SCRIPT"
+  exit 1
+fi
+
+#----------------
+# Clean up: remove this script so another upload can be started
+
+rm -f "$UPLOAD_SCRIPT"
+
+#----------------
+# Finish
+
+echo "\$(date "+%F %T %z"): upload completed [\$(_duration_from \$START)]"
+
+# EOF
+
+EOF
+
+  chmod a+x "$UPLOAD_SCRIPT"
+
+  nohup "$UPLOAD_SCRIPT" >> "$LOGFILE" 2>&1 &
+  UPLOAD_PID=$!
+
+  # Detect early termination errors
+  sleep 3
+  if ! ps $UPLOAD_PID > /dev/null; then
+    # QEMU process no longer running
+    echo "$EXE: error: upload failed (see \"$LOGFILE\" for details)" 2>&1
+    exit 1
+  fi
+
+  # Output rest of upload message
+
+  cat <<EOF
+Check progress in the log file:
+  $LOGFILE
+
+[Running under nohup: upload will continue to run after logout.]
+
+EOF
 }
 
 #----------------------------------------------------------------
