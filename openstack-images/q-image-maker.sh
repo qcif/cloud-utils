@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.2.0'
+VERSION='2.3.0'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -72,9 +72,9 @@ DEFAULT_INSTANCE_MIN_RAM_MIB=1024
 #----------------------------------------------------------------
 # Process command line
 
-SHORT_OPTS=cd:Df:hi:ln:s:t:uVvwx:
+SHORT_OPTS=acd:Df:hi:ln:s:t:uVvwx:
 
-LONG_OPTS=create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,cpu:,ram:,help,linux,version,verbose,windows,debug
+LONG_OPTS=agent,create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,cpu:,ram:,help,linux,version,verbose,windows,debug
 
 #----------------
 # Detect if GNU Enhanced getopt is available
@@ -118,6 +118,7 @@ NUM_CPUS=$DEFAULT_NUM_CPUS
 RAM_SIZE=$DEFAULT_RAM_SIZE
 ISO_IMAGES=
 OS_TYPE=
+AGENT=
 INSTANCE_MIN_RAM_MIB=$DEFAULT_INSTANCE_MIN_RAM_MIB
 INSTANCE_MIN_DISK_GIB=
 SHOW_VERSION=
@@ -142,6 +143,7 @@ while [ $# -gt 0 ]; do
     -n | --name)     IMAGE_NAME="$2"; shift;;
          --min-ram)  INSTANCE_MIN_RAM_MIB="$2"; shift;;
          --min-disk) INSTANCE_MIN_DISK_GIB="$2"; shift;;
+    -a | --agent)    AGENT=yes;;
 
     -h | --help)     SHOW_HELP=yes;;
     -V | --version)  SHOW_VERSION=yes;;
@@ -166,6 +168,7 @@ Options create and run:
   -d | --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)
        --cpu CORES       number of cores assigned to run VM (default: $DEFAULT_NUM_CPUS)
        --ram SIZE_MIB    memory assigned to run VM (default: $DEFAULT_RAM_SIZE MiB)
+  -a | --agent           set image property so VM uses the QEMU Guest Agent
 
 Options for upload:
   -n | --name imageName  name of glance image (default: "$DEFAULT_IMAGE_NAME_PREFIX <name> <time>")
@@ -437,12 +440,20 @@ run_vm () {
     exit 3
   fi
 
+  # VNC port number
+
+  PORT=$((5900 + VNC_DISPLAY))
+
   # Run QEMU
+  #
+  # QRIScloud VMs on Nectar have VirtIO balloon device and VirtIO RNG devices.
 
   COMMAND="$QEMU_EXEC $QEMU_OPTIONS \
     -drive file=$IMAGE,if=$DISK_INTERFACE,index=0 \
     $CDROM_OPTIONS \
     $BOOT_ORDER_OPTIONS \
+    -balloon virtio \
+    -device virtio-rng-pci \
     $EXTRA_QEMU_OPTIONS \
     -vnc 127.0.0.1:$VNC_DISPLAY"
 
@@ -454,7 +465,7 @@ run_vm () {
 
   cat >> "$LOGFILE" <<EOF
 
-$(date "+%F %T %z"): QEMU: command:
+$(date "+%F %T %z"): running (VNC TCP/IP port: $PORT)
 $COMMAND
 EOF
 
@@ -469,11 +480,9 @@ EOF
     exit 1
   fi
 
-  echo "$(date "+%F %T %z"): QEMU: PID=$QEMU_PID" >> "$LOGFILE"
+  echo "$(date "+%F %T %z"): $QEMU_EXEC: PID=$QEMU_PID" >> "$LOGFILE"
 
   # Output instructions
-
-  PORT=$((5900 + VNC_DISPLAY))
 
   cat <<EOF
 
@@ -642,6 +651,16 @@ do_upload() {
     fi
   fi
 
+  # Variables depending on if --agent option was specified or not
+
+  local AGENT_PROPERTY=
+  local AGENT_DISPLAY='-'
+  if [ -n "$AGENT" ]; then
+    # Metadata indicating the image has the QEMU Guest Aguent
+    AGENT_PROPERTY='--property hw_qemu_guest_agent=yes'
+    AGENT_DISPLAY='yes'
+  fi
+
   # Output start of upload message
 
   cat <<EOF
@@ -651,11 +670,12 @@ UPLOADING IMAGE TO GLANCE
 Source:
   File: $IMAGE
 Destination:
-  Image name: $IMAGE_NAME
-  Project: $OS_PROJECT_NAME
+  Image name: "$IMAGE_NAME"
+  Project: "$OS_PROJECT_NAME"
   Minimum disk size: $INSTANCE_MIN_DISK_GIB GiB
   Minimum RAM size: $INSTANCE_MIN_RAM_MIB MiB
   os_type: $OS_TYPE
+  QEMU Guest Agent: $AGENT_DISPLAY
 
 EOF
 
@@ -741,10 +761,19 @@ START=\$(date '+%s') # seconds past epoch
 # useful for debugging.
 
 cat <<EOF1
-\$(date "+%F %T %z"): upload started
+
+\$(date "+%F %T %z"): uploading
+  Image name: "$IMAGE_NAME"
+  Project: "$OS_PROJECT_NAME"
+  Minimum disk size: $INSTANCE_MIN_DISK_GIB GiB
+  Minimum RAM size: $INSTANCE_MIN_RAM_MIB MiB
+  os_type: $OS_TYPE
+  QEMU Guest Agent: $AGENT_DISPLAY
+  ----
   To abort the upload: kill the Python process running "openstack image create".
-  Its parent process is running the upload script: the parent PID is \$\$:
-    kill "\\\$(ps -ef -o ppid,pid,args | grep '^\$\$ ' | cut -d ' ' -f 2)"
+  Its parent process (PID=\$\$) is running the upload script, so the
+  Python process can be killed with:
+    kill "\\\$(ps -e -o ppid,pid,args | grep '^\$\$ ' | cut -d ' ' -f 2)"
 EOF1
 
 #----------------
@@ -759,6 +788,7 @@ if ! openstack image create \
      --min-ram "$INSTANCE_MIN_RAM_MIB" \
      --project "$OS_PROJECT_ID" \
      --property os_type=$OS_TYPE \
+     $AGENT_PROPERTY \
      "$IMAGE_NAME" ; then
   echo "\$(date "+%F %T %z"): error: openstack image create failed" >&2
   rm -f "$UPLOAD_SCRIPT"
