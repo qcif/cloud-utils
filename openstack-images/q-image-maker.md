@@ -41,10 +41,12 @@ Create or run options:
   -d | --display num     VNC server display (default: 0)
   -D | --disk-type intf  virtual QEMU disk interface (default: virtio)
   -e | --extra-opts str  extra options to pass to QEMU
+  -a | --agent           include interface for a VirtIO Serial Driver
 
 Upload options:
   -l | --linux           set os_type property for uploaded image to linux
   -w | --windows         set os_type property for uploaded image to windows
+  -a | --agent           set metadata for QEMU Guest Agent
 
 Common options:
   -v | --verbose         output extra information when running
@@ -95,6 +97,19 @@ This script has been tested on CentOS 7 and Ubuntu 20.04.
 
 Diagnosis
 ---------
+
+### qemu-kvm: Failed to start VNC server on ...: Failed to bind to socket: Address already in use
+
+Another guest virtual machine is already running. Its VNC is alrady
+using the port.
+
+One solution is to run the new guest virtual machine on a different
+port, using the `--display` option to change the VNC server display
+number.
+
+But it is better to stop the other guest virtual machine. Since
+performance is likely to be reduced by having multiple guest virtual
+machines running at the same time.
 
 ### MP-BIOS bug: 8254 timer not connected
 

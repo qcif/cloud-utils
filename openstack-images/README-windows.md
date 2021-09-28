@@ -88,8 +88,10 @@ in GitHub](https://github.com/qcif/cloud-utils).
 Create an disk image, and run a virtual machine with it and the two
 ISO images:
 
-    [creator@host]$ ./q-image-maker.sh create --iso windows.iso  --iso virtio-win.iso \
-                    --size 30  image.qcow2
+    [creator@host]$ ./q-image-maker.sh create \
+                                       --iso windows.iso --iso virtio-win.iso \
+                                       --agent \
+                                       --size 30  image.qcow2
 
 The disk image **must** be large enough to hold the operating system
 and any extra software installed on the image. Set the target disk size in
@@ -123,6 +125,9 @@ same size as the disk on the virtual machine that will be
 instantiated. Maybe a future release of Cloudbase-Init will address
 this problem, but we do not know if expanding the main partition is
 even possible.
+
+The agent option adds a VirtIO Serial interface to the VM. This will
+be needed to prepare the image for use withthe QEUM Guest Agent.
 
 The disk image will be in the default QEMU Copy-On-Write version 2
 "qcow2" format, which is required for it to be used as the boot
@@ -198,7 +203,7 @@ No drives will be available until the VirtIO disk drivers are loaded.
 
 3. Browse the second CD drive, and navigate to and select the
    directory that is most suitable for the version of Windows being
-   installed.  For example, the "E:\AMD64\2k19R2" directory.  Press the
+   installed.  For example, the "E:\AMD64\2k19" directory.  Press the
    "OK" button.
 
 4. The "Select the driver to install" dialog should detect the "Red
@@ -214,7 +219,7 @@ No drives will be available until the VirtIO disk drivers are loaded.
      but there will not be enough space to install updates and/or
      additional applications.
 
-5. Press "Next" and Wait for the installation to finish. (About 20
+5. Press "Next" and Wait for the installation to finish. (About 10
    minutes.)
 
 6. Set the administrator password and press the "Finish" button.
@@ -228,7 +233,21 @@ No drives will be available until the VirtIO disk drivers are loaded.
      character classes: lowercase letters, uppercase letters, numbers
      or symbols.
 
-#### 2e. VirtIO network drivers
+#### 2e. Server Manager
+
+Prevent the _Server Manager_ application from automatically starting.
+
+1. In _Server Manager_ application, open the "Manage" menu (top right).
+
+2. Select "Server Manager Properties".
+
+3. Check the "Do not start Server Manager automatically at logon" checkbox.
+
+4. Press the "OK" button.
+
+5. Close the _Server Manager_ application.
+
+#### 2f. VirtIO network drivers
 
 Note: some versions of Windows may strongly suggest that connecting to
 the Internet is desirable during the installation process.  But it
@@ -245,23 +264,15 @@ interfaces.
    _Screens_ application, use the _Command_ > _Ctrl-Alt-Del_ menu item),
    since typing those keys would affect your local computer rather
    than the guest system.
-   
+
     Sign in as the Administrator.
 
-2. Open the _Device Manager_, by launching the _Control Panel_ and the
-   selecting _System and Security > Hardware > Device Manager_.
+2. Open the _Device Manager_. This can be done by right clicking on
+   the Start button and selecting "Device Manager".
 
-    The "Hardware" link is in the navigation list on the left side of
-    the window.  In some versions of Windows, it is called "Hardware
-    and sound".
-
-    The _Control Panel_ is often hard to find, since Microsoft is
-    pushing users to their fancy, but limited, _Settings_ application.
-    It might be available as a tile on the Start menu, or is buried
-    under the "Windows Systems" folder of the list of all applications.
-
-    Under "Other Devices" the Ethernet controller should appear as an
-    "Unknown device" whose driver could not be found.
+    Under "Other Devices" the Ethernet controller should appear as one
+    of the "Unknown device" whose driver could not be found (usually
+    the first).
 
 3. View the properties of the "Unknown device" Ethernet Controller
    (under the "Other devices" section). By double clicking on it, or
@@ -306,7 +317,89 @@ interfaces.
 
 A Windows restart might be required for the network drivers to work.
 
-#### 2f. Time zone
+#### 2g. Other VirtIO drivers
+
+Under the "Other devices" section of the Device Manager, there should
+be other interfaces without drivers:
+
+- "PCI Device" for the VirtIO Balloon Driver;
+- "PCI Device" for the VirtIO RNG Device; and
+- "PCI Simple Communications Controller" for the VirtIO Serial Driver
+  (if the `--agent` options was used).
+
+Install the drivers:
+
+1. View the properties of the device: double clicking on it or right
+   clicking on it and selecting Properties.
+
+2. Press the "Update Driver" button.
+
+3. Choose "Browse my computer for drivers".
+
+4. Press the "Next" button, since the location is the same as
+   previously used for the network driver and the "Include subfolders"
+   checkbox is already checked.
+
+5. Press the "Close" button on the update drivers window.
+
+5. Press the "Close" button on the driver/device properties window.
+
+6. Repeat for the other devices without drivers.
+
+
+#### 2h. QEMU Guest Agent
+
+Install the _QEMU Guest Agent_. It is a helper daemon that runs inside
+the Windows guest, and is used to exchange information between the
+host and the guest. For example, it can help properly shutdown the
+Windows guest and assist when snapshots are being made.
+
+First, check the VirtIO Serial Driver was one of the drivers installed
+in the previous step. The QEMU Guest Agent uses it to communicate with
+the host. If the VirtIO Serial Driver driver was not installed, the
+agent will not work (even though it installs without any errors).  The
+serial interface is present only if the VM was started with the
+`--agent` option.
+
+Install the QEMU Guest Agent:
+
+1. Open the file explorer and browse to the second CD Drive (E:).
+
+2. Double-click on the "virtio-win-guest-tools.exe" program.
+
+3. Follow the wizard to install it.
+
+    a. Check the "I agree to the license terms and conditions"
+    checkbox and then press the "Install" button.
+
+    b. Press the "Next" button for the Virtio-win-driver-installer.
+
+    c. Check the "I accept the terms in the License Agreement"
+    checkbox and press the "Next" button.
+
+    d. Press the "Next" button to install the drivers.
+
+    e. Press the "Install" button.
+
+    f. When it has finished, press the "Close" button.
+
+The agent can be checked by opening the _Services_ manager (run
+“services.mgr”, search for “services" or right click on Start and
+choose "Computer Management" > Services and Applications > Services).
+It should be running and started automatically.  The name of the
+service is “QEMU Guest Agent”.
+
+There is also a “QEMU Guest Agent VSS Provider” that is not running
+and startup is manual. Applications need to have support for
+Microsoft's Volume Shadow Copy Service (VSS), for it to have an effect
+on those applications.
+
+Note: when preparing the image, there is nothing on the host for the
+QEUM Guest Agent to communicate with.  But the VirtIO Serial Driver
+must be installed so the interface will work when the image is
+launched in OpenStack.
+
+#### 2g. Time zone
 
 When the image is instantiated, it will have a (virtual) hardware
 clock will be in the local time of the availability zone. Set the time
@@ -331,7 +424,7 @@ Zones, the Windows timezone may be wrong for some of them.
 
 5. Close the Control Panel Clock, Language, and Region window.
 
-#### 2g. Disable display blanking
+#### 2h. Disable display blanking
 
 When running as a virtual machine instance, there is no point in
 turning off the display to save power and it is more likely to cause
@@ -350,14 +443,13 @@ confusion when trying to use it.
 
 6. Close the Control Panel Power Settings window.
 
-#### 2h. Configure Windows Update
+#### 2i. Configure Windows Update
 
 Turn on automatic updates and install the current updates.
 
 1. Open the Windows Start Menu.
 
-2. Choose _Settings_ -- yes, the fancy, but limited, application and
-   not the _Control Panel_. It is the gears icon in the Start menu.
+2. Choose _Settings_ (the gears icon in the Start menu).
 
 3. Choose _Update & Security_ (the window may need to be scrolled up
    to see it).
@@ -376,10 +468,10 @@ Turn on automatic updates and install the current updates.
 
 9. Sign back into the Administrator account.
 
-Note: some updates are installed when Windows is shutdown or
-restarted. And some updates won't be available until other updates
-have been installed.  Restart Windows and check for updates a few
-times, before finalising the image.
+**Important:** some updates are installed when Windows is shutdown or
+restarted. And also some updates won't appear until other updates have
+been installed.  Restart Windows and check for updates a few times,
+before finalising the image.
 
 ### Step 3: Optionally install additional software
 
@@ -467,7 +559,7 @@ have to be run manually.
          C:\Windows\System32\Sysprep\sysprep /generalize /oobe
 
 3. Wait for _sysprep_ to finish running, and for it to shutdown the
-   guest. (About 7 minutes.)
+   guest. (About 3 minutes.)
 
 4. Close the VNC client.
 
@@ -504,23 +596,33 @@ Sysprep must be rerun on it.
 
 #### 5c. Setup credentials to connect to OpenStack
 
-1. On the creation host, source the RC file.
+1. On the creation host, source the RC file for the OpenStack project.
 
-    [creator@host]$ . projectname-openrc.sh
+        [creator@host]$ . projectname-openrc.sh
 
 2. Enter your OpenStack account password, when promoted.
+
 
 #### 5d. Upload image
 
 Upload the disk image, optionally giving it a name:
 
-    [creator@host]$ ./q-image-maker.sh upload --windows --name "My new image" image.qcow2
+    [creator@host]$ ./q-image-maker.sh upload --windows --agent --name "My new image" image.qcow2
 
 The `--windows` option sets the "os_type" property on the image.  It
 controls the behaviour when the image is used. For example, instances
 launched from it will have a virtual hardware clock in local time
 (instead of UTC for Linux images). If there are ephemeral disks, it
 formats them as NTFS (instead of ext3 for Linux).
+
+The `--agent` option sets the metadata on the uploaded image, to
+indicate there will be a QEMU Guest Agent running inside the VM
+instance. It sets the _hw_qemu_guest_agent_ property to "yes".
+
+**Important:** do not use the `--agent` option, if the QEMU Guest
+Agent and the VirtIO Serial Driver both have not been installed inside
+the image. Otherwise, OpenStack will try to contact the agent and will
+not be able to.
 
 ### Step 6: Use the image to instantiate virtual machine instances
 
@@ -585,11 +687,12 @@ disks can be used for additional storage.
 
 #### Connect to the VM instance for the first time
 
-1. Go to the console for the VM instance in the Nectar dashboard.
+1. Go to the console for the VM instance in the OpenStack dashboard.
 
-    From the left side navigation, select Compute > Instances. Then
-    select the instance, and then the "Console" tab at the top of the
-    page.
+    From the page showing a list of instances (Compute > Instances),
+    select "Console" from the action drop-down menu at the right of
+    the instance. Or on the page showing the details of the instance,
+    choose the "Console" tab from the top of the page.
 
 2. Click on the gray area at the top or sides of the console, so
    keystrokes are sent to the console.
@@ -662,9 +765,9 @@ Protocol service.
 instances are secure.**
 
 **Do not expose the Remote Desktop protocol to the wider Internet,
-because it has known security vulnerbilities. Use Nectar security
-group rules and other mechanisms to prevent untrusted hosts to connect
-to the VM instance.**
+because it has known security vulnerbilities. Use the OpenStack
+security group rules and other mechanisms to prevent untrusted hosts
+to connect to the VM instance.**
 
 1. Open the System Properties window. Launch the _Control Panel_ and
    select _System and Security_ > _Allow remote access_.
@@ -721,4 +824,3 @@ Contact
 -------
 
 Please send feedback and queries to Hoylen Sue at <hoylen.sue@qcif.edu.au>.
-

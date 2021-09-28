@@ -77,6 +77,10 @@ changed using command line options.
 The script runs _qemu-kvm_ in the background with _nohup_. So you can
 log out of the creation host and it will continue running.
 
+If you intend to install the QEMU Guest Agent, include the `--agent`
+option to simulate the VirtIO Serial device it uses to communicate
+with the host.
+
 #### 2b. Use VNC to access the guest system
 
 Connect to the VNC server (e.g. in this example to local port 15900
@@ -241,6 +245,8 @@ The following configurations are also recommended:
         [root@guest]# rpm -Uvh http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
         [root@guest]# yum -y install cloud-init
 
+- Include the QEMU Guest Agent.
+
 - Configure users and cloud-init
 
     After installing cloud-init, there will be a user called "cloud-user".
@@ -308,6 +314,7 @@ Alternatively, the
 [virt-sysprep](http://libguestfs.org/virt-sysprep.1.html) utility can
 perform some of these configurations.
 
+
 #### 2e. Shutdown the guest system
 
 When finished, shutdown the guest virtual machine and immediately
@@ -358,6 +365,10 @@ Upload the disk image, optionally giving it a name:
 
     [creator@host]$ ./q-image-maker.sh upload --linux --name "My CentOS image" --min-disk 10 disk.qcow2
 
+If the QEMU Guest Agent has been installed, include the `--agent`
+option to set the metadata on the uploaded image. Do not use that
+option, if the agent has not been installed.  Otherwise, OpenStack
+will attempt to use it and it will not work properly.
 
 ### Step 6: Use the image to instantiate virtual machine instances
 

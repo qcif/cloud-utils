@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.3.0'
+VERSION='2.4.0'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -57,7 +57,7 @@ DEFAULT_DISK_INTERFACE=virtio
 DEFAULT_VNC_DISPLAY=0
 
 #----------------
-# Defaults for the image to be uploaded into OpenStack glance.
+# Defaults for the image to be uploaded into OpenStack Glance.
 
 # To make it easy to test multiple images, without having to think of new
 # names, this script will generate names like "Test <diskImage> (<time>)",
@@ -143,6 +143,7 @@ while [ $# -gt 0 ]; do
     -n | --name)     IMAGE_NAME="$2"; shift;;
          --min-ram)  INSTANCE_MIN_RAM_MIB="$2"; shift;;
          --min-disk) INSTANCE_MIN_DISK_GIB="$2"; shift;;
+
     -a | --agent)    AGENT=yes;;
 
     -h | --help)     SHOW_HELP=yes;;
@@ -158,24 +159,25 @@ if [ -n "$SHOW_HELP" ]; then
 Usage: $EXE_EXT (create|run|upload) [options] diskImage
 
 Options for create:
-  -s | --size size       size of disk to create in GiB (default: $DEFAULT_DISK_SIZE_GIB GiB)
-  -f | --format diskFmt  format of image: raw or qcow2 (default: $DEFAULT_CREATE_DISK_FORMAT)
+  -s | --size GIB        size of disk to create in GiB (default: $DEFAULT_DISK_SIZE_GIB GiB)
+  -f | --format DISKFMT  format of image: raw or qcow2 (default: $DEFAULT_CREATE_DISK_FORMAT)
                          Note: mount/unmount only works with the raw format
 Options create and run:
-  -i | --iso isoFile     attach as a CDROM (repeat for multiple ISO images)
-  -t | --disk-type inter QEMU disk interface: virtio or ide (default: $DEFAULT_DISK_INTERFACE)
-  -x | --extra-opts str  extra QEMU options, for advanced use
-  -d | --display num     VNC server display (default: $DEFAULT_VNC_DISPLAY)
+  -i | --iso ISO_FILE    attach as a CDROM (repeat for multiple ISO images)
+  -t | --disk-type INTER QEMU disk interface: virtio or ide (default: $DEFAULT_DISK_INTERFACE)
+  -x | --extra-opts STR  extra options passed to QEMU, for advanced use
+  -d | --display NUM     VNC server display (default: $DEFAULT_VNC_DISPLAY)
        --cpu CORES       number of cores assigned to run VM (default: $DEFAULT_NUM_CPUS)
        --ram SIZE_MIB    memory assigned to run VM (default: $DEFAULT_RAM_SIZE MiB)
-  -a | --agent           set image property so VM uses the QEMU Guest Agent
+  -a | --agent           include interface for a VirtIO Serial Driver
 
 Options for upload:
-  -n | --name imageName  name of glance image (default: "$DEFAULT_IMAGE_NAME_PREFIX <name> <time>")
+  -n | --name imageName  name in OpenStack (default: "$DEFAULT_IMAGE_NAME_PREFIX <name> <time>")
   -l | --linux           set os_type property to linux (mandatory if no -w)
   -w | --windows         set os_type property to windows (mandatory if no -l)
        --min-ram size    minimum RAM size in MiB (default: $DEFAULT_INSTANCE_MIN_RAM_MIB)
        --min-disk size   minimum disk size in GiB (default: from image file)
+  -a | --agent           set metadata for QEMU Guest Agent
 
 Common options:
   -v | --verbose         output extra information when running
@@ -444,9 +446,29 @@ run_vm () {
 
   PORT=$((5900 + VNC_DISPLAY))
 
+  # VirtIO Serial Driver
+
+  local VIRTIO_SERIAL=
+  if [ -n "$AGENT" ]; then
+    # Agent preparation mode
+
+    # Create a VirtIO Serial Driver (like that used for communications
+    # between the host and the QEMU Guest Agent) so the "VirtIO Serial
+    # Driver" can be installed into the image for Windows. Otherwise,
+    # the user will have to manually install the driver when the image
+    # is launched in Nectar.
+    #
+    # See <https://fedoraproject.org/wiki/Features/VirtioSerial> for
+    # the example options this was derived from.
+
+    VIRTIO_SERIAL='-device virtio-serial -chardev null,id=A1 -device virtserialport,chardev=A1'
+  fi
+
   # Run QEMU
   #
-  # QRIScloud VMs on Nectar have VirtIO balloon device and VirtIO RNG devices.
+  # VM instances on Nectar also have interfaces for the VirtIO Balloon
+  # Driver and VirtIO RNG Device. Make those available here, so the
+  # drivers for them can be installed into the image for Windows.
 
   COMMAND="$QEMU_EXEC $QEMU_OPTIONS \
     -drive file=$IMAGE,if=$DISK_INTERFACE,index=0 \
@@ -454,6 +476,7 @@ run_vm () {
     $BOOT_ORDER_OPTIONS \
     -balloon virtio \
     -device virtio-rng-pci \
+    $VIRTIO_SERIAL \
     $EXTRA_QEMU_OPTIONS \
     -vnc 127.0.0.1:$VNC_DISPLAY"
 
@@ -493,9 +516,9 @@ Connect to the guest VM using VNC (via an SSH tunnel if necessary):
   Authentication: VNC password not used (not VNC password with an empty string)
 
 When finished using the guest VM, terminate it by either:
-  a. shutdown inside the guest operating system (this is the preferred method);
-  b. enter "quit" in the QEMU console (Ctrl-Alt-2 in the VNC client); or
-  c. run "kill $QEMU_PID".
+  a. inside the guest operating system, perform a shutdown [preferred];
+  b. in the QEMU console (Ctrl-Alt-2 in the VNC client), enter "quit"; or
+  c. on the host, run "kill $QEMU_PID".
 
 [Running under nohup: guest VM will continue to run after logout.]
 
@@ -654,18 +677,18 @@ do_upload() {
   # Variables depending on if --agent option was specified or not
 
   local AGENT_PROPERTY=
-  local AGENT_DISPLAY='-'
+  local AGENT_DISPLAY_MESSAGE='-'
   if [ -n "$AGENT" ]; then
-    # Metadata indicating the image has the QEMU Guest Aguent
+    # Add metadata to indicate there is a QEMU Guest Agent running in instances
     AGENT_PROPERTY='--property hw_qemu_guest_agent=yes'
-    AGENT_DISPLAY='yes'
+    AGENT_DISPLAY_MESSAGE='yes'
   fi
 
   # Output start of upload message
 
   cat <<EOF
 
-UPLOADING IMAGE TO GLANCE
+UPLOADING IMAGE
 
 Source:
   File: $IMAGE
@@ -675,7 +698,7 @@ Destination:
   Minimum disk size: $INSTANCE_MIN_DISK_GIB GiB
   Minimum RAM size: $INSTANCE_MIN_RAM_MIB MiB
   os_type: $OS_TYPE
-  QEMU Guest Agent: $AGENT_DISPLAY
+  QEMU Guest Agent: $AGENT_DISPLAY_MESSAGE
 
 EOF
 
@@ -768,12 +791,12 @@ cat <<EOF1
   Minimum disk size: $INSTANCE_MIN_DISK_GIB GiB
   Minimum RAM size: $INSTANCE_MIN_RAM_MIB MiB
   os_type: $OS_TYPE
-  QEMU Guest Agent: $AGENT_DISPLAY
+  QEMU Guest Agent: $AGENT_DISPLAY_MESSAGE
   ----
   To abort the upload: kill the Python process running "openstack image create".
   Its parent process (PID=\$\$) is running the upload script, so the
   Python process can be killed with:
-    kill "\\\$(ps -e -o ppid,pid,args | grep '^\$\$ ' | cut -d ' ' -f 2)"
+    kill "\\\$(ps -e -o ppid,pid,args | grep '^ *\$\$ ' | cut -d ' ' -f 2)"
 EOF1
 
 #----------------
