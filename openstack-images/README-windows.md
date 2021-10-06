@@ -224,18 +224,30 @@ No drives will be available until the VirtIO disk drivers are loaded.
 
 6. Set the administrator password and press the "Finish" button.
 
-     This administrator password will be reset by either _cloud-init_
-     or _sysprep_ (used as a final step when preparing the image).  So
-     this password is only for temporary use, while the image is being
-     created, and it can be forgotten after that.
+     This administrator password is only needed for temporary use. It
+     will be removed by the final step of preparing the image (when
+     _sysprep_ is run).  It can be forgotten after the image has been
+     created.
 
-     Passwords must contain characters from at least three of these
-     character classes: lowercase letters, uppercase letters, numbers
-     or symbols.
+     Passwords must contain at least one character from at least three
+     of these character classes: lowercase letters, uppercase letters,
+     numbers or symbols.
+
+7. Sign in as the Administrator.
+
+    Type Ctrl-Alt-Delete into the VNC session to sign in.  The VNC
+    client should have a special feature to do this (e.g.  in the
+    macOS _Screens_ application, use the _Command_ > _Ctrl-Alt-Del_
+    menu item), since typing those keys would affect your local
+    computer rather than the guest system.
 
 #### 2e. Server Manager
 
 Prevent the _Server Manager_ application from automatically starting.
+
+It starts up by default. Disabling it is less important for this
+temporary Administrator account. But it is useful to know how to do it
+for long-lived accounts.
 
 1. In _Server Manager_ application, open the "Manage" menu (top right).
 
@@ -259,47 +271,35 @@ installation process has been fully completed.
 Install the VirtIO network drivers to use the virtual network
 interfaces.
 
-1. Type Ctrl-Alt-Delete into the VNC session to sign in.  The VNC
-   client should have a special feature to do this (e.g.  in the macOS
-   _Screens_ application, use the _Command_ > _Ctrl-Alt-Del_ menu item),
-   since typing those keys would affect your local computer rather
-   than the guest system.
-
-    Sign in as the Administrator.
-
-2. Open the _Device Manager_. This can be done by right clicking on
+1. Open the _Device Manager_. This can be done by right clicking on
    the Start button and selecting "Device Manager".
 
     Under "Other Devices" the Ethernet controller should appear as one
-    of the "Unknown device" whose driver could not be found (usually
-    the first).
+    of the devices without a driver. In some versions of Windows, it
+    will be helpfully identified as an "Ethernet Controller". But in
+    other versions it might simply be called an "Unknown device".
 
-3. View the properties of the "Unknown device" Ethernet Controller
-   (under the "Other devices" section). By double clicking on it, or
-   right clicking on it and selecting Properties.
+2. View the properties of the Ethernet Controller, by double clicking
+   on it or right clicking on it and selecting Properties.
 
-    In some versions of Windows, it will be called "Ethernet
-    Controller" instead of "Unknown device". But it should still
-    have a yellow hazard triangle on its icon.
+3. Press the "Update Driver" button.
 
-4. Press the "Update Driver" button.
+4. Choose "Browse my computer for drivers".
 
-5. Choose "Browse my computer for drivers".
+5. Press the "Browse..." button.
 
-6. Press the "Browse..." button.
-
-7. Select the top level of the second CD Drive (E:) (unlike for the
+6. Select the top level of the second CD Drive (E:) (unlike for the
    VirtIO disk driver, a specific subdirectory and file does not need
        to be chosen for the VirtIO network driver) and press the "OK"
    button.
 
-8. Ensure the "Include subfolders" checkbox is checked and press the
+7. Ensure the "Include subfolders" checkbox is checked and press the
    "Next" button.
 
      It should find the "Red Hat VirtIO Ethernet Adapter" driver
      and automatically install it.
 
-9. When asked, "Do you want to allow your PC to be discoverable by
+8. When asked, "Do you want to allow your PC to be discoverable by
    other PCs and devices on this network?", press the "No" button.  It
    is more secure to not allow discovery, which is used for network
    features such as file and printer sharing. Choosing "No" will also
@@ -307,15 +307,12 @@ interfaces.
    that affects the behaviour of the _Windows Firewall_ and other
    aspects of Windows.
 
-10. Press the "Close" to close the driver update success window.
+9. Press the "Close" to close the driver update success window.
 
-11. Press the "Close" button to close the Ethernet Adapter Properties dialog.
+10. Press the "Close" button to close the Ethernet Adapter Properties dialog.
 
-12. Close the Device Manager window.
-
-13. Close the Control Panel Hardware window.
-
-A Windows restart might be required for the network drivers to work.
+On some versions of Windows, a restart might be required for the
+network driver to work.
 
 #### 2g. Other VirtIO drivers
 
@@ -337,8 +334,8 @@ Install the drivers:
 3. Choose "Browse my computer for drivers".
 
 4. Press the "Next" button, since the location is the same as
-   previously used for the network driver and the "Include subfolders"
-   checkbox is already checked.
+   previously used and the "Include subfolders" checkbox is already
+   checked.
 
 5. Press the "Close" button on the update drivers window.
 
@@ -365,7 +362,8 @@ Install the QEMU Guest Agent:
 
 1. Open the file explorer and browse to the second CD Drive (E:).
 
-2. Double-click on the "virtio-win-guest-tools.exe" program.
+2. Double-click on the "virtio-win-guest-tools.exe" program (though
+   the _.exe_ extension will be hidden.)
 
 3. Follow the wizard to install it.
 
@@ -399,7 +397,7 @@ QEUM Guest Agent to communicate with.  But the VirtIO Serial Driver
 must be installed so the interface will work when the image is
 launched in OpenStack.
 
-#### 2g. Time zone
+#### 2i. Time zone
 
 When the image is instantiated, it will have a (virtual) hardware
 clock will be in the local time of the availability zone. Set the time
@@ -424,7 +422,7 @@ Zones, the Windows timezone may be wrong for some of them.
 
 5. Close the Control Panel Clock, Language, and Region window.
 
-#### 2h. Disable display blanking
+#### 2j. Disable display blanking
 
 When running as a virtual machine instance, there is no point in
 turning off the display to save power and it is more likely to cause
@@ -443,9 +441,60 @@ confusion when trying to use it.
 
 6. Close the Control Panel Power Settings window.
 
-#### 2i. Configure Windows Update
+#### 2k. Configure Windows Update
 
-Turn on automatic updates and install the current updates.
+By default, Windows Server 2022 has a Local Group Policy that prevents
+Windows Updates from being automatically downloaded and installed. But
+default, they are automatically downloaded but not installed---and the
+user is prevented from enabling automatical installation without
+changing the Local Group Policy.
+
+Automatic download _and install_ is strongly recommended, unless users
+are expected to manually install the updates on a regular basis.
+
+To disable that Local Group Policy:
+
+1. Open the _Local Group Policy Editor_.
+
+    In the Windows search, type "gpe" or "group policy" and select the
+    "Edit Group Policy" that is found.
+
+2. Expand "Computer Configuration" > "Administrative Templates" >
+   "Windows Components" and select "Windows Update" from it.
+
+3. Select the "Configure Automatic Updates" setting for help about
+   that setting.
+
+4. Double click on "Configure Automatic Updates" and configure it:
+
+     a. Select the "Enabled" radio button".
+
+     b. In the options, configure automatic updating to
+          "5. Allow local administrators to choose setting".
+
+     c. The other settings can be left unchanged.
+
+     d. Press the "OK" button.
+
+5. Close the _Local Group Policy Editor_.
+
+
+Note: according to the help text, the default (where "Configure
+Automatic Updates" is "not configured") should allow an administrator
+to "still configure Automatic Updates through Control Panel." But we
+have found that is not true, since the administrator is prevented from
+enabling automatic installation of updates. By default, updates are
+automatically download updates and not installed. The user is supposed
+to be notified about them, though we have not seen any notifications
+appear.
+
+#### 2l. Apply current Windows Updates
+
+To avoid every VM instances using the image from having to download
+and install the updates that are currently available, install them in
+the image.
+
+To install the currently available updates.
 
 1. Open the Windows Start Menu.
 
@@ -458,7 +507,7 @@ Turn on automatic updates and install the current updates.
 
 5. Wait for the update check to finish and for all the updates to download.
    Note: some VNC clients do not refresh unless their window has focus,
-   so the progress indicators might not always update.
+   so the progress indicators might not always change.
 
 6. Press the "Install now" button, if it appears.
 
