@@ -444,8 +444,8 @@ confusion when trying to use it.
 #### 2k. Configure Windows Update
 
 By default, Windows Server 2022 has a Local Group Policy that prevents
-Windows Updates from being automatically downloaded and installed. But
-default, they are automatically downloaded but not installed---and the
+Windows Updates from being automatically downloaded and installed.
+They are automatically downloaded but _not_ installed---and the
 user is prevented from enabling automatical installation without
 changing the Local Group Policy.
 
@@ -469,10 +469,13 @@ To disable that Local Group Policy:
 
      a. Select the "Enabled" radio button".
 
-     b. In the options, configure automatic updating to
-          "5. Allow local administrators to choose setting".
+     b. In the options, change _configure automatic updating_ to
+          "4 - Auto download and schedule the install".
 
-     c. The other settings can be left unchanged.
+     c. Leave the "Install during automatic maintenance"
+        checkbox unchecked. This allows the updates to be
+        installed as soon as possible.
+        All the other settings can be left unchanged.
 
      d. Press the "OK" button.
 
