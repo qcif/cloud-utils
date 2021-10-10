@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.4.0'
+VERSION='2.5.0'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -74,7 +74,7 @@ DEFAULT_INSTANCE_MIN_RAM_MIB=1024
 
 SHORT_OPTS=acd:Df:hi:ln:s:t:uVvwx:
 
-LONG_OPTS=agent,create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,cpu:,ram:,help,linux,version,verbose,windows,debug
+LONG_OPTS=agent,create,run,upload,format:,disk-type:,iso:,linux,size:,display:,extra-opts:,name:,min-disk:,min-ram:,cpu:,ram:,shared,description:,help,linux,version,verbose,windows,debug
 
 #----------------
 # Detect if GNU Enhanced getopt is available
@@ -121,6 +121,8 @@ OS_TYPE=
 AGENT=
 INSTANCE_MIN_RAM_MIB=$DEFAULT_INSTANCE_MIN_RAM_MIB
 INSTANCE_MIN_DISK_GIB=
+DESCRIPTION=
+SHARED=
 SHOW_VERSION=
 SHOW_HELP=
 
@@ -141,6 +143,8 @@ while [ $# -gt 0 ]; do
     -w | --windows)  OS_TYPE=windows;;
 
     -n | --name)     IMAGE_NAME="$2"; shift;;
+         --description) DESCRIPTION="$2"; shift;;
+         --shared)   SHARED=yes;;
          --min-ram)  INSTANCE_MIN_RAM_MIB="$2"; shift;;
          --min-disk) INSTANCE_MIN_DISK_GIB="$2"; shift;;
 
@@ -178,6 +182,8 @@ Options for upload:
        --min-ram size    minimum RAM size in MiB (default: $DEFAULT_INSTANCE_MIN_RAM_MIB)
        --min-disk size   minimum disk size in GiB (default: from image file)
   -a | --agent           set metadata for QEMU Guest Agent
+       --shared          set the visibility to shared (default: private)
+       --description TXT set the description property
 
 Common options:
   -v | --verbose         output extra information when running
@@ -656,6 +662,10 @@ do_upload() {
   MIN_GIB_NEEDED=$( qemu-img info "$IMAGE" \
                       | grep 'virtual size' \
                       | sed -E 's/virtual size: ([0-9]+)G .*/\1/' )
+  if echo "$MIN_GIB_NEEDED" | grep -qE ' MiB'; then
+    # Less than 1 GiB: use 1 GiB as the minimum needed
+    MIN_GIB_NEEDED=1
+  fi
   if [ -z "$MIN_GIB_NEEDED" ]; then
     echo "$EXE: error: could not detect minimum disk size: $IMAGE" >&2
     exit 1
@@ -668,6 +678,7 @@ do_upload() {
     INSTANCE_MIN_DISK_GIB=$MIN_GIB_NEEDED
   else
     # Value provided: check it is not smaller than the size indicated by the image file
+
     if [  "$INSTANCE_MIN_DISK_GIB" -lt "$MIN_GIB_NEEDED" ]; then
       echo "$EXE: error: minimum disk size too small: $INSTANCE_MIN_DISK_GIB GiB (need at least ${MIN_GIB_NEEDED} GiB)" >&2
       exit 1
@@ -682,6 +693,24 @@ do_upload() {
     # Add metadata to indicate there is a QEMU Guest Agent running in instances
     AGENT_PROPERTY='--property hw_qemu_guest_agent=yes'
     AGENT_DISPLAY_MESSAGE='yes'
+  fi
+
+  # Variable for the visibility
+
+  local VISIBILITY_PROPERTY='--private'
+  local VISIBLITY_MESSAGE=private
+  if [ -n "$SHARED" ]; then
+    VISIBILITY_PROPERTY='--shared'
+    VISIBLITY_MESSAGE=shared
+  fi
+
+  # Variable for the description property
+
+  local DESCRIPTION_PROPERTY=
+  local DESCRIPTION_MESSAGE=
+  if [ -n "$DESCRIPTION" ]; then
+    DESCRIPTION_PROPERTY="--property description='$DESCRIPTION'"
+    DESCRIPTION_MESSAGE="$DESCRIPTION"
   fi
 
   # Output start of upload message
@@ -792,6 +821,8 @@ cat <<EOF1
   Minimum RAM size: $INSTANCE_MIN_RAM_MIB MiB
   os_type: $OS_TYPE
   QEMU Guest Agent: $AGENT_DISPLAY_MESSAGE
+  Visibility: $VISIBILITY_MESSAGE
+  Description property: $DESCRIPTION_MESSAGE
   ----
   To abort the upload: kill the Python process running "openstack image create".
   Its parent process (PID=\$\$) is running the upload script, so the
@@ -806,12 +837,13 @@ if ! openstack image create \
      --container-format 'bare' \
      --disk-format $UPLOAD_DISK_FORMAT \
      --file "$IMAGE" \
-     --private \
      --min-disk "$INSTANCE_MIN_DISK_GIB" \
      --min-ram "$INSTANCE_MIN_RAM_MIB" \
      --project "$OS_PROJECT_ID" \
      --property os_type=$OS_TYPE \
      $AGENT_PROPERTY \
+     $VISIBILITY_PROPERTY \
+     $DESCRIPTION_PROPERTY \
      "$IMAGE_NAME" ; then
   echo "\$(date "+%F %T %z"): error: openstack image create failed" >&2
   rm -f "$UPLOAD_SCRIPT"
