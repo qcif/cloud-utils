@@ -27,7 +27,7 @@
 #----------------------------------------------------------------
 
 PROGRAM='q-image-maker'
-VERSION='2.5.0'
+VERSION='2.6.0'
 
 EXE=$(basename "$0" .sh)
 EXE_EXT=$(basename "$0")
@@ -486,7 +486,10 @@ run_vm () {
     $EXTRA_QEMU_OPTIONS \
     -vnc 127.0.0.1:$VNC_DISPLAY"
 
-  # -monitor stdio
+  # Note: -balloon is not supported in openstack 5.6.0, so do NOT
+  # use that version of the OpenStack client tools!
+
+  # For debugging, this option might be useful: -monitor stdio
 
   # Run QEMU in background (nohup so user can log out without stopping it)
 
@@ -661,7 +664,7 @@ do_upload() {
 
   MIN_GIB_NEEDED=$( qemu-img info "$IMAGE" \
                       | grep 'virtual size' \
-                      | sed -E 's/virtual size: ([0-9]+)G .*/\1/' )
+                      | sed -E 's/^.*virtual size: ([0-9]+) G.*/\1/' )
   if echo "$MIN_GIB_NEEDED" | grep -qE ' MiB'; then
     # Less than 1 GiB: use 1 GiB as the minimum needed
     MIN_GIB_NEEDED=1
