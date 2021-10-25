@@ -333,6 +333,13 @@ if [ "$RAM_SIZE" -gt $((64 * 1024))  ]; then
   exit 2
 fi
 
+REAL_RAM_KB=$(grep MemTotal /proc/meminfo | sed -E 's/^.*: *([0-9]+) kB$/\1/')
+REAL_RAM=$(($REAL_RAM_KB / 1024))
+RAM_OVERHEAD=128 # MiB allowed for host operating system
+if [ $(($REAL_RAM - $RAM_OVERHEAD)) -le "$RAM_SIZE" ]; then
+  echo "$EXE: WARNING: VM uses $RAM_SIZE MiB (available: $REAL_RAM MiB)" >&2
+fi
+
 #----------------
 # Check number of CPUs for running guest VM
 
@@ -352,8 +359,13 @@ if [ "$NUM_CPUS" -gt 16 ]; then
   exit 2
 fi
 
+REAL_CORES=$(grep 'cpu cores' /proc/cpuinfo | sed -E 's/^.*: *([0-9]+)$/\1/')
+if [ "$REAL_CORES" -le "$NUM_CPUS" ]; then
+  echo "$EXE: WARNING: VM uses $NUM_CPUS cores (available: $REAL_CORES)" >&2
+fi
+
 #----------------
-# Check minimum RAM size
+# Check minimum RAM size for metadata in uploaded image
 
 if ! echo "$INSTANCE_MIN_RAM_MIB" | grep -qE '^[0-9]+$'; then
   echo "$EXE: usage error: minimum RAM size: bad number: $INSTANCE_MIN_RAM_MIB" >&2
@@ -365,7 +377,7 @@ if [ "$INSTANCE_MIN_RAM_MIB" -lt 64 ]; then
 fi
 
 #----------------
-# Check minimum disk size
+# Check minimum disk size for metadata in uploaded image
 
 if [ -n "$INSTANCE_MIN_DISK_GIB" ]; then
   if ! echo "$INSTANCE_MIN_DISK_GIB" | grep -qE '^[0-9]+$'; then
