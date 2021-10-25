@@ -492,14 +492,13 @@ run_vm () {
     -drive file=$IMAGE,if=$DISK_INTERFACE,index=0 \
     $CDROM_OPTIONS \
     $BOOT_ORDER_OPTIONS \
-    -balloon virtio \
+    -device virtio-balloon \
     -device virtio-rng-pci \
     $VIRTIO_SERIAL \
     $EXTRA_QEMU_OPTIONS \
     -vnc 127.0.0.1:$VNC_DISPLAY"
 
-  # Note: -balloon is not supported in openstack 5.6.0, so do NOT
-  # use that version of the OpenStack client tools!
+  # Note: older QEMU (e.g. v1.5.3) use "-balloon" not "-device virtio-balloon".
 
   # For debugging, this option might be useful: -monitor stdio
 
